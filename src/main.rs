@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use reqwest::header;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serenity::async_trait;
@@ -49,17 +48,10 @@ struct File {
     content: String,
 }
 
-#[derive(Debug)]
-struct FilePreviewData {
-    raw_url: Url,
-    api_url: String,
-    metadata_content: String,
-    file_type: FileType,
-    position: u32,
-}
-
 trait FilePreview {
+    fn get_message_url(&self) -> &Url;
     fn get_raw_url(&self) -> &Url;
+    fn get_metadata_content(&self) -> &String;
     fn get_file_extension(&self) -> Option<&String>;
 }
 
@@ -138,23 +130,34 @@ impl GistFilePreview {
             .push("raw")
             .push(&selected_file_name);
 
-        let metadata_content = MessageBuilder::new()
-            .push_bold_line_safe(metadata.owner)
-            .push_italic_line_safe(metadata.description)
-            .build();
+        let mut metadata_content_builder = MessageBuilder::new();
+        metadata_content_builder.push_bold_line_safe(metadata.owner);
+
+        if !metadata.description.is_empty() {
+            metadata_content_builder
+                .push_line_safe(truncate_string(metadata.description.as_str(), 128));
+        }
 
         Ok(Self {
             message_url,
             raw_url,
-            metadata_content,
+            metadata_content: metadata_content_builder.build(),
             file_extension,
         })
     }
 }
 
 impl FilePreview for GistFilePreview {
+    fn get_message_url(&self) -> &Url {
+        &self.message_url
+    }
+
     fn get_raw_url(&self) -> &Url {
         &self.raw_url
+    }
+
+    fn get_metadata_content(&self) -> &String {
+        &self.metadata_content
     }
 
     fn get_file_extension(&self) -> Option<&String> {
@@ -222,19 +225,21 @@ impl GitHubRepositoryFilePreview {
 }
 
 impl FilePreview for GitHubRepositoryFilePreview {
+    fn get_message_url(&self) -> &Url {
+        &self.message_url
+    }
+
     fn get_raw_url(&self) -> &Url {
         &self.raw_url
+    }
+
+    fn get_metadata_content(&self) -> &String {
+        &self.metadata_content
     }
 
     fn get_file_extension(&self) -> Option<&String> {
         self.file_extension.as_ref()
     }
-}
-
-#[derive(Debug, PartialEq)]
-enum FileType {
-    File,
-    Gist,
 }
 
 lazy_static! {
@@ -243,18 +248,27 @@ lazy_static! {
     static ref REGEX_GITHUB_GIST_URL: Regex =
         Regex::new(r"https://gist\.github\.com(?:/[^/\s]+){2}#file\-[^\s]+").unwrap();
     static ref REGEX_GITHUB_LINE_NUMBER: Regex = Regex::new(r"L(\d+)").unwrap();
-    static ref REGEX_GITHUB_GIST_FILE_NAME: Regex = Regex::new(r"file-(.+)-L").unwrap();
+    static ref REGEX_GITHUB_GIST_FILE_NAME: Regex = Regex::new(r"file-([^L]+)").unwrap();
+}
+
+fn truncate_string(string: &str, max_length: usize) -> String {
+    if string.len() > max_length {
+        let (truncated_string, _) = string.split_at(max_length - 3);
+        format!("{}...", truncated_string)
+    } else {
+        string.to_owned()
+    }
 }
 
 async fn send_file_preview(
     ctx: &Context,
     msg: &Message,
-    data: FilePreviewData,
+    file_preview: impl FilePreview,
 ) -> Result<(), Box<dyn Error>> {
     let line_numbers: Vec<u32> = REGEX_GITHUB_LINE_NUMBER
         .captures_iter(
-            &data
-                .raw_url
+            file_preview
+                .get_message_url()
                 .fragment()
                 .ok_or("The specified URL is malformed.")?,
         )
@@ -273,21 +287,7 @@ async fn send_file_preview(
         .ok_or("At least one line number is required.")?
         .clone();
 
-    let mut headers = header::HeaderMap::new();
-    headers.insert(
-        header::ACCEPT,
-        header::HeaderValue::from_str(if data.file_type == FileType::File {
-            "text/plain"
-        } else {
-            "application/vnd.github.raw+json"
-        })?,
-    );
-
-    let request = reqwest::Client::new()
-        .get(&data.api_url)
-        .headers(headers)
-        .send()
-        .await?;
+    let request = reqwest::get(file_preview.get_raw_url().clone()).await?;
 
     if !request.status().is_success() {
         return Err("API request failed.".into());
@@ -300,69 +300,14 @@ async fn send_file_preview(
         return Err("File size is too large.".into());
     }
 
-    let file_extension: String;
-    let selected_content: Vec<String>;
+    let file = request.text().await?;
 
-    if data.file_type == FileType::File {
-        let file = request.text().await?;
-
-        selected_content = file
-            .lines()
-            .skip(top_line_number as usize - 1)
-            .take((bottom_line_number - top_line_number + 1) as usize)
-            .map(|line| line.to_owned())
-            .collect();
-
-        let file_name = &data
-            .raw_url
-            .path_segments()
-            .and_then(|segments| segments.last())
-            .ok_or("File name not found.")?;
-
-        file_extension = PathBuf::from(file_name)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .unwrap_or("txt")
-            .to_owned();
-    } else if data.file_type == FileType::Gist {
-        // TODO: fix
-        let gist: Gist = request.json().await?;
-
-        let selected_file_name = REGEX_GITHUB_GIST_FILE_NAME
-            .captures(
-                &data
-                    .raw_url
-                    .fragment()
-                    .expect("The specified URL is malformed."),
-            )
-            .ok_or("File name not found.")?[1]
-            .to_owned();
-
-        let file = gist
-            .files
-            .into_iter()
-            .find(|(_, file)| file.filename == selected_file_name)
-            .map(|(_, file)| file);
-
-        selected_content = file
-            .map(|file| {
-                file.content
-                    .lines()
-                    .skip(top_line_number as usize - 1)
-                    .take((bottom_line_number - top_line_number + 1) as usize)
-                    .map(|line| line.to_owned())
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        file_extension = PathBuf::from(selected_file_name)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .unwrap_or("")
-            .to_owned();
-    } else {
-        return Err("Invalid file type.".into());
-    }
+    let selected_content: Vec<String> = file
+        .lines()
+        .skip(top_line_number as usize - 1)
+        .take((bottom_line_number - top_line_number + 1) as usize)
+        .map(|line| line.to_owned())
+        .collect();
 
     if selected_content.is_empty() {
         return Err("No content selected.".into());
@@ -386,7 +331,7 @@ async fn send_file_preview(
         .collect::<String>();
 
     let open_button = CreateButton::default()
-        .url(&data.raw_url)
+        .url(file_preview.get_message_url())
         .style(ButtonStyle::Link)
         .emoji('🔗')
         .label("Open")
@@ -398,15 +343,23 @@ async fn send_file_preview(
         .emoji('🗑')
         .to_owned();
 
+    // TODO: ugly
+    let file_extension = file_preview
+        .get_file_extension()
+        .cloned()
+        .unwrap_or(String::from("txt"));
+
     let mut reply: Message;
-    if file_content.len() + data.metadata_content.len() > 1900 || selected_content.len() > 6 {
+    if file_content.len() + file_preview.get_metadata_content().len() > 1900
+        || selected_content.len() > 6
+    {
         let mut components = CreateActionRow::default();
         components.add_button(open_button);
         components.add_button(delete_button);
         reply = msg
             .channel_id
             .send_message(&ctx.http, |m| {
-                m.content(data.metadata_content);
+                m.content(file_preview.get_metadata_content());
                 m.add_file((
                     file_content.as_bytes(),
                     format!("preview.{}", file_extension).as_str(),
@@ -431,8 +384,10 @@ async fn send_file_preview(
             .channel_id
             .send_message(&ctx.http, |m| {
                 m.content(format!(
-                    "{}\n```{}\n{}```",
-                    data.metadata_content, file_extension, file_content
+                    "{}```{}\n{}```",
+                    file_preview.get_metadata_content(),
+                    file_extension,
+                    file_content
                 ));
                 m.components(|c| {
                     c.create_action_row(|a| a.add_button(open_button).add_button(delete_button))
@@ -445,9 +400,9 @@ async fn send_file_preview(
 }
 
 async fn check_file_preview(ctx: &Context, msg: &mut Message) -> Result<(), Box<dyn Error>> {
-    let mut total_preview_count = 0;
+    // let mut total_preview_count = 0;
 
-    let mut queue: Vec<FilePreviewData> = Vec::new();
+    // let mut queue: Vec<&dyn FilePreview> = Vec::new();
 
     for raw_url_match in REGEX_GITHUB_FILE_URL.find_iter(&msg.content) {
         let raw_url = match Url::parse(raw_url_match.as_str()) {
@@ -455,31 +410,9 @@ async fn check_file_preview(ctx: &Context, msg: &mut Message) -> Result<(), Box<
             Err(_) => continue,
         };
 
-        let path_segments: Vec<&str> = raw_url.path_segments().unwrap().collect();
-
-        let (author, repository, branch, path) = match path_segments.as_slice() {
-            [author, repository, "blob", branch, path @ ..] => {
-                (author, repository, branch, path.join("/"))
-            }
-            _ => continue,
-        };
-
-        let metadata_content = format!(
-            "**{}**/**{}** (on {})\n{}",
-            author, repository, branch, path
-        );
-        let api_url = format!(
-            "https://raw.githubusercontent.com/{}/{}/{}/{}",
-            author, repository, branch, path
-        );
-
-        queue.push(FilePreviewData {
-            position: raw_url_match.start() as u32,
-            raw_url: raw_url,
-            api_url,
-            metadata_content,
-            file_type: FileType::File,
-        });
+        let file_preview = GitHubRepositoryFilePreview::new(raw_url)?;
+        send_file_preview(&ctx, &msg, file_preview).await?;
+        // queue.push(&file_preview);
     }
 
     for raw_url_match in REGEX_GITHUB_GIST_URL.find_iter(&msg.content) {
@@ -488,38 +421,26 @@ async fn check_file_preview(ctx: &Context, msg: &mut Message) -> Result<(), Box<
             Err(_) => continue,
         };
 
-        let path_segments: Vec<&str> = raw_url.path_segments().unwrap().collect();
-        let (author, id) = match path_segments.as_slice() {
-            [_, author, id] => (author, id),
-            _ => continue,
-        };
-
-        let metadata_content = format!("**{}**", author);
-        let api_url = format!("https://api.github.com/gists/{}", id);
-
-        queue.push(FilePreviewData {
-            position: raw_url_match.start() as u32,
-            raw_url: raw_url,
-            api_url,
-            metadata_content,
-            file_type: FileType::Gist,
-        });
+        let file_preview = GistFilePreview::new(raw_url).await?;
+        send_file_preview(&ctx, &msg, file_preview).await?;
+        // queue.push(&file_preview);
     }
 
-    queue.sort_unstable_by_key(|preview| preview.position);
+    // TODO: do this
+    // queue.sort_unstable_by_key(|preview| preview.position);
 
-    for preview in queue {
-        if total_preview_count >= 3 {
-            break;
-        }
+    // for preview in queue {
+    //     if total_preview_count >= 3 {
+    //         break;
+    //     }
 
-        send_file_preview(&ctx, &msg, preview).await?;
-        total_preview_count += 1;
-    }
+    //     send_file_preview(&ctx, &msg, preview).await?;
+    //     total_preview_count += 1;
+    // }
 
-    if total_preview_count > 0 {
-        let _ = msg.suppress_embeds(&ctx).await;
-    }
+    // if total_preview_count > 0 {
+    //     let _ = msg.suppress_embeds(&ctx).await;
+    // }
 
     Ok(())
 }
