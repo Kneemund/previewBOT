@@ -10,5 +10,8 @@ regex = "1.10.0"
 reqwest = "0.11.22"
 serde = "1.0.188"
 serde_json = "1.0.107"
-serenity = { version = "0.11", default-features = false, features = ["builder", "cache", "client", "gateway", "model", "utils", "rustls_backend"] }
+serenity = { git = "https://github.com/serenity-rs/serenity", branch = "next", default-features = false, features = ["builder", "cache", "client", "gateway", "model", "utils", "rustls_backend"] }
 tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
+
+[profile.release]
+debug = true
