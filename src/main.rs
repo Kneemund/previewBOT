@@ -3,7 +3,9 @@ use std::env;
 use std::error::Error;
 use std::path::PathBuf;
 
+use lazy_static::lazy_static;
 use regex::Regex;
+use reqwest::header;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serenity::async_trait;
@@ -49,11 +51,184 @@ struct File {
 
 #[derive(Debug)]
 struct FilePreviewData {
-    raw_url: String,
+    raw_url: Url,
     api_url: String,
     metadata_content: String,
     file_type: FileType,
     position: u32,
+}
+
+trait FilePreview {
+    fn get_raw_url(&self) -> &Url;
+    fn get_file_extension(&self) -> Option<&String>;
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct APIGistMetadata {
+    description: String,
+    public: bool,
+    created_at: String,
+    files: Vec<String>,
+    owner: String,
+    // div: String,
+    // stylesheet: String,
+}
+
+struct GistFilePreview {
+    message_url: Url,
+    raw_url: Url,
+    metadata_content: String,
+    file_extension: Option<String>,
+}
+
+impl GistFilePreview {
+    /// Normalizes a file name by removing all non-alphanumeric characters and converting all characters to lowercase.
+    /// This is needed because the file name in the URL fragment is heavily modified compared to the actual file name.
+    fn normalize_file_name(string: &str) -> String {
+        string
+            .chars()
+            .filter_map(|character| {
+                if character.is_alphanumeric() {
+                    Some(character.to_ascii_lowercase())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    async fn new(message_url: Url) -> Result<Self, Box<dyn Error>> {
+        let selected_file_name_fragment = Self::normalize_file_name(
+            &REGEX_GITHUB_GIST_FILE_NAME
+                .captures(
+                    message_url
+                        .fragment()
+                        .expect("The specified URL is malformed."),
+                )
+                .ok_or("File name not found.")?[1],
+        );
+
+        let mut metadata_url = message_url.clone();
+        metadata_url.set_fragment(None);
+        metadata_url.set_path((metadata_url.path().to_owned() + ".json").as_str());
+
+        let response = reqwest::get(metadata_url).await?;
+
+        if !response.status().is_success() {
+            return Err("API request failed.".into());
+        }
+
+        let metadata: APIGistMetadata = response.json().await?;
+
+        let selected_file_name = metadata
+            .files
+            .iter()
+            .find(|file_name| Self::normalize_file_name(file_name) == selected_file_name_fragment)
+            .ok_or("File not found.")?;
+
+        let file_extension = PathBuf::from(selected_file_name)
+            .extension()
+            .and_then(|extension| Some(extension.to_string_lossy().into_owned()));
+
+        let mut raw_url = message_url.clone();
+        raw_url.set_fragment(None);
+        raw_url
+            .path_segments_mut()
+            .unwrap()
+            .push("raw")
+            .push(&selected_file_name);
+
+        let metadata_content = MessageBuilder::new()
+            .push_bold_line_safe(metadata.owner)
+            .push_italic_line_safe(metadata.description)
+            .build();
+
+        Ok(Self {
+            message_url,
+            raw_url,
+            metadata_content,
+            file_extension,
+        })
+    }
+}
+
+impl FilePreview for GistFilePreview {
+    fn get_raw_url(&self) -> &Url {
+        &self.raw_url
+    }
+
+    fn get_file_extension(&self) -> Option<&String> {
+        self.file_extension.as_ref()
+    }
+}
+
+struct GitHubRepositoryFilePreview {
+    message_url: Url,
+    raw_url: Url,
+    metadata_content: String,
+    file_extension: Option<String>,
+}
+
+impl GitHubRepositoryFilePreview {
+    fn new(message_url: Url) -> Result<Self, Box<dyn Error>> {
+        let path_segments: Vec<&str> = message_url.path_segments().unwrap().collect();
+
+        let (author, repository, branch, path) = match path_segments.as_slice() {
+            [author, repository, "blob", branch, path @ ..] => {
+                (author, repository, branch, path.join("/"))
+            }
+            _ => return Err("Malformed GitHub repository URL.".into()),
+        };
+
+        let metadata_content = MessageBuilder::new()
+            .push_bold_safe(author)
+            .push("/")
+            .push_bold_safe(repository)
+            .push("(on ")
+            .push_safe(branch)
+            .push_line(")")
+            .push_line_safe(path.as_str())
+            .build();
+
+        // TODO: construct using URL, error handling
+        let raw_url = Url::parse(
+            format!(
+                "https://raw.githubusercontent.com/{}/{}/{}/{}",
+                author,
+                repository,
+                branch,
+                path.as_str()
+            )
+            .as_str(),
+        )
+        .unwrap();
+
+        let file_name = message_url
+            .path_segments()
+            .and_then(|segments| segments.last())
+            .ok_or("File name not found.")?;
+
+        let file_extension = PathBuf::from(file_name)
+            .extension()
+            .and_then(|extension| Some(extension.to_string_lossy().into_owned()));
+
+        Ok(Self {
+            message_url,
+            raw_url,
+            metadata_content,
+            file_extension,
+        })
+    }
+}
+
+impl FilePreview for GitHubRepositoryFilePreview {
+    fn get_raw_url(&self) -> &Url {
+        &self.raw_url
+    }
+
+    fn get_file_extension(&self) -> Option<&String> {
+        self.file_extension.as_ref()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,57 +237,50 @@ enum FileType {
     Gist,
 }
 
+lazy_static! {
+    static ref REGEX_GITHUB_FILE_URL: Regex =
+        Regex::new(r"https://github\.com(?:/[^/\s]+){2}/blob(?:/[^/\s]+)+#[^/\s]+").unwrap();
+    static ref REGEX_GITHUB_GIST_URL: Regex =
+        Regex::new(r"https://gist\.github\.com(?:/[^/\s]+){2}#file\-[^\s]+").unwrap();
+    static ref REGEX_GITHUB_LINE_NUMBER: Regex = Regex::new(r"L(\d+)").unwrap();
+    static ref REGEX_GITHUB_GIST_FILE_NAME: Regex = Regex::new(r"file-(.+)-L").unwrap();
+}
+
 async fn send_file_preview(
     ctx: &Context,
     msg: &Message,
     data: FilePreviewData,
 ) -> Result<(), Box<dyn Error>> {
-    // let GITHUB_FILE_URLS =
-    //     Regex::new(r"https://github\.com(?:/[^/\s]+){2}/blob(?:/[^/\s]+)+#[^/\s]+").unwrap();
+    let line_numbers: Vec<u32> = REGEX_GITHUB_LINE_NUMBER
+        .captures_iter(
+            &data
+                .raw_url
+                .fragment()
+                .ok_or("The specified URL is malformed.")?,
+        )
+        .filter_map(|match_captures| match_captures[1].parse::<u32>().ok())
+        .collect();
 
-    // let line_numbers = GITHUB_FILE_URLS
-    //     .captures(&data.raw_url)
-    //     .and_then(|caps| caps.get(1))
-    //     .map(|line_numbers| line_numbers.as_str())
-    //     .map(|line_numbers| {
-    //         line_numbers
-    //             .split('-')
-    //             .map(|line_number| line_number.parse::<u32>().unwrap_or(1))
-    //             .collect::<Vec<_>>()
-    //     });
+    let top_line_number = line_numbers
+        .iter()
+        .min()
+        .ok_or("At least one line number is required.")?
+        .clone();
 
-    let GITHUB_FILE_URLS =
-        Regex::new(r"https://github\.com(?:/[^/\s]+){2}/blob(?:/[^/\s]+)+#L(\d+)(?:-L(\d+))?")
-            .unwrap();
+    let bottom_line_number = line_numbers
+        .iter()
+        .max()
+        .ok_or("At least one line number is required.")?
+        .clone();
 
-    let line_numbers = GITHUB_FILE_URLS
-        .captures(&data.raw_url)
-        .map(|caps| {
-            let start_line = caps[1].parse::<u32>().unwrap_or(1);
-            let end_line = caps
-                .get(2)
-                .map(|end_line| end_line.as_str().parse::<u32>().unwrap_or(start_line))
-                .unwrap_or(start_line);
-            (start_line, end_line)
-        })
-        .expect("Invalid line numbers.".into());
-
-    let (top_line_number, bottom_line_number) = if line_numbers.0 > line_numbers.1 {
-        (line_numbers.1, line_numbers.0)
-    } else {
-        line_numbers
-    };
-
-    let content_type = if data.file_type == FileType::File {
-        "text/plain"
-    } else {
-        "application/vnd.github.raw+json"
-    };
-
-    let mut headers = reqwest::header::HeaderMap::new();
+    let mut headers = header::HeaderMap::new();
     headers.insert(
-        reqwest::header::ACCEPT,
-        reqwest::header::HeaderValue::from_str(content_type)?,
+        header::ACCEPT,
+        header::HeaderValue::from_str(if data.file_type == FileType::File {
+            "text/plain"
+        } else {
+            "application/vnd.github.raw+json"
+        })?,
     );
 
     let request = reqwest::Client::new()
@@ -125,8 +293,10 @@ async fn send_file_preview(
         return Err("API request failed.".into());
     }
 
-    let file_size = request.content_length().unwrap_or(0);
-    if file_size > 4_194_304 {
+    if request
+        .content_length()
+        .is_some_and(|file_size| file_size > 4_194_304)
+    {
         return Err("File size is too large.".into());
     }
 
@@ -143,46 +313,37 @@ async fn send_file_preview(
             .map(|line| line.to_owned())
             .collect();
 
-        // let file_path = PathBuf::from(&data.raw_url);
-
-        // let file_name = file_path
-        //     .file_name()
-        //     .and_then(|file_name| file_name.to_str())
-        //     .unwrap_or("");
-
-        // file_extension = file_path
-        //     .extension()
-        //     .and_then(|extension| extension.to_str())
-        //     .unwrap_or("")
-        //     .to_owned();
-
-        let url = Url::parse(&data.raw_url)?;
-
-        let file_name = url
+        let file_name = &data
+            .raw_url
             .path_segments()
             .and_then(|segments| segments.last())
-            .unwrap_or("");
+            .ok_or("File name not found.")?;
 
         file_extension = PathBuf::from(file_name)
             .extension()
             .and_then(|extension| extension.to_str())
-            .unwrap_or("")
+            .unwrap_or("txt")
             .to_owned();
     } else if data.file_type == FileType::Gist {
-        let GITHUB_GIST_URLS: Regex =
-            Regex::new(r"https://gist\.github\.com(?:/[^/\s]+){2}#file\-[^\s]+").unwrap();
-
+        // TODO: fix
         let gist: Gist = request.json().await?;
-        let selected_file_name = GITHUB_GIST_URLS
-            .captures(&data.raw_url)
-            .and_then(|caps| caps.get(1))
-            .map(|selected_file_name| selected_file_name.as_str())
-            .unwrap_or("");
+
+        let selected_file_name = REGEX_GITHUB_GIST_FILE_NAME
+            .captures(
+                &data
+                    .raw_url
+                    .fragment()
+                    .expect("The specified URL is malformed."),
+            )
+            .ok_or("File name not found.")?[1]
+            .to_owned();
+
         let file = gist
             .files
             .into_iter()
             .find(|(_, file)| file.filename == selected_file_name)
             .map(|(_, file)| file);
+
         selected_content = file
             .map(|file| {
                 file.content
@@ -237,21 +398,6 @@ async fn send_file_preview(
         .emoji('🗑')
         .to_owned();
 
-    // let content = format!(
-    //     "{}\n{}\n{}",
-    //     file_content, data.metadata_content, file_extension
-    // );
-
-    // let _ = msg
-    //     .channel_id
-    //     .send_message(&ctx.http, |m| {
-    //         m.content(content);
-    //         m.components(|c| {
-    //             c.create_action_row(|a| a.add_button(open_button).add_button(delete_button))
-    //         })
-    //     })
-    //     .await;
-
     let mut reply: Message;
     if file_content.len() + data.metadata_content.len() > 1900 || selected_content.len() > 6 {
         let mut components = CreateActionRow::default();
@@ -299,16 +445,11 @@ async fn send_file_preview(
 }
 
 async fn check_file_preview(ctx: &Context, msg: &mut Message) -> Result<(), Box<dyn Error>> {
-    let GITHUB_FILE_URLS =
-        Regex::new(r"https://github\.com(?:/[^/\s]+){2}/blob(?:/[^/\s]+)+#[^/\s]+").unwrap();
-    let GITHUB_GIST_URLS: Regex =
-        Regex::new(r"https://gist\.github\.com(?:/[^/\s]+){2}#file\-[^\s]+").unwrap();
-
     let mut total_preview_count = 0;
 
     let mut queue: Vec<FilePreviewData> = Vec::new();
 
-    for raw_url_match in GITHUB_FILE_URLS.find_iter(&msg.content) {
+    for raw_url_match in REGEX_GITHUB_FILE_URL.find_iter(&msg.content) {
         let raw_url = match Url::parse(raw_url_match.as_str()) {
             Ok(url) => url,
             Err(_) => continue,
@@ -334,14 +475,14 @@ async fn check_file_preview(ctx: &Context, msg: &mut Message) -> Result<(), Box<
 
         queue.push(FilePreviewData {
             position: raw_url_match.start() as u32,
-            raw_url: raw_url.to_string(),
+            raw_url: raw_url,
             api_url,
             metadata_content,
             file_type: FileType::File,
         });
     }
 
-    for raw_url_match in GITHUB_GIST_URLS.find_iter(&msg.content) {
+    for raw_url_match in REGEX_GITHUB_GIST_URL.find_iter(&msg.content) {
         let raw_url = match Url::parse(raw_url_match.as_str()) {
             Ok(url) => url,
             Err(_) => continue,
@@ -358,7 +499,7 @@ async fn check_file_preview(ctx: &Context, msg: &mut Message) -> Result<(), Box<
 
         queue.push(FilePreviewData {
             position: raw_url_match.start() as u32,
-            raw_url: raw_url.to_string(),
+            raw_url: raw_url,
             api_url,
             metadata_content,
             file_type: FileType::Gist,
@@ -388,7 +529,9 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, context: Context, mut msg: Message) {
-        check_file_preview(&context, &mut msg).await.unwrap();
+        if !msg.author.bot {
+            check_file_preview(&context, &mut msg).await.unwrap();
+        }
 
         if msg.content == "!ping" {
             let channel = match msg.channel_id.to_channel(&context).await {
