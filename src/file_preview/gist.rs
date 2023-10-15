@@ -7,6 +7,8 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serenity::utils::MessageBuilder;
 
+use crate::HTTP_CLIENT;
+
 use super::{fetch_raw_content, truncate_string, FilePreview};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -63,7 +65,7 @@ impl GistFilePreview {
         metadata_url.set_fragment(None);
         metadata_url.set_path((metadata_url.path().to_owned() + ".json").as_str());
 
-        let response = reqwest::get(metadata_url).await?;
+        let response = HTTP_CLIENT.get(metadata_url).send().await?;
 
         if !response.status().is_success() {
             return Err("API request failed.".into());

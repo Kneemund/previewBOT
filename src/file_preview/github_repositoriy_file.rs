@@ -25,11 +25,11 @@ impl GitHubRepositoryFilePreview {
         };
 
         let metadata_content = MessageBuilder::new()
-            .push_bold_safe(author)
+            .push_bold_safe(author.to_owned())
             .push("/")
-            .push_bold_safe(repository)
+            .push_bold_safe(repository.to_owned())
             .push(" (on ")
-            .push_safe(branch)
+            .push_safe(branch.to_owned())
             .push_line(")")
             .push_line_safe(path.as_str())
             .build();

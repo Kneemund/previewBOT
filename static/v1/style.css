@@ -1,0 +1,58 @@
+body {
+    margin: 0;
+    padding: 0;
+}
+
+.image-comparison {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.image-comparison img {
+    max-width: 100vw;
+    max-height: 100vh;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: left;
+}
+
+.image-comparison .images-container {
+    position: relative;
+    display: flex;
+}
+
+.image-comparison .images-container .before-image {
+    position: absolute;
+    top: 0;
+    width: 50%;
+}
+
+.image-comparison .slider {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+}
+
+.image-comparison .slider-line {
+    position: absolute;
+    height: 100%;
+    width: 4px;
+    background: #fff;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.image-comparison .slider-icon {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 60px;
+    height: 60px;
+    color: #fff;
+    transform: translate(-50%, -50%);
+}

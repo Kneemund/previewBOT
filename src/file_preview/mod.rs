@@ -4,14 +4,18 @@ use std::fmt::Write;
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Url;
-use serenity::builder::CreateButton;
+use serenity::all::{ButtonStyle, ComponentInteraction};
+use serenity::builder::{
+    CreateActionRow, CreateAllowedMentions, CreateAttachment, CreateButton, CreateMessage,
+    EditMessage,
+};
 use serenity::futures::future::join_all;
-use serenity::model::application::component::ButtonStyle;
 use serenity::model::channel::Message;
-use serenity::model::prelude::message_component::MessageComponentInteraction;
 use serenity::model::prelude::MessageReference;
 use serenity::prelude::*;
 use serenity::utils::MessageBuilder;
+
+use crate::HTTP_CLIENT;
 
 use self::gist::GistFilePreview;
 use self::github_repositoriy_file::GitHubRepositoryFilePreview;
@@ -63,20 +67,20 @@ impl PreviewUrlMatch<'_> {
 }
 
 async fn fetch_raw_content(url: Url) -> Result<String, Box<dyn Error + Send + Sync>> {
-    let request = reqwest::get(url).await?;
+    let response = HTTP_CLIENT.get(url).send().await?;
 
-    if !request.status().is_success() {
+    if !response.status().is_success() {
         return Err("API request failed.".into());
     }
 
-    if request
+    if response
         .content_length()
         .is_some_and(|file_size| file_size > 4_194_304)
     {
         return Err("File size is too large.".into());
     }
 
-    Ok(request.text().await?)
+    Ok(response.text().await?)
 }
 
 fn truncate_string(string: &str, max_length: usize) -> String {
@@ -145,15 +149,12 @@ async fn send_file_preview(
         },
     );
 
-    let open_button = CreateButton::default()
-        .url(file_preview.get_message_url())
-        .style(ButtonStyle::Link)
+    let open_button = CreateButton::new_link(file_preview.get_message_url().as_str())
         .emoji('🔗')
         .label("Open")
         .to_owned();
 
-    let delete_button = CreateButton::default()
-        .custom_id(format!("deleteFilePreview:{}", msg.author.id))
+    let delete_button = CreateButton::new(format!("deleteFilePreview:{}", msg.author.id))
         .style(ButtonStyle::Secondary)
         .emoji('🗑')
         .to_owned();
@@ -163,9 +164,11 @@ async fn send_file_preview(
     {
         let mut reply = msg
             .channel_id
-            .send_message(&ctx.http, |m| {
-                m.content(file_preview.get_metadata_content())
-                    .add_file((
+            .send_message(
+                &ctx.http,
+                CreateMessage::new()
+                    .content(file_preview.get_metadata_content())
+                    .add_file(CreateAttachment::bytes(
                         file_content.as_bytes(),
                         format!(
                             "preview.{}",
@@ -174,11 +177,12 @@ async fn send_file_preview(
                         .as_str(),
                     ))
                     .reference_message(msg)
-                    .allowed_mentions(|am| am.empty_parse())
-                    .components(|c| {
-                        c.create_action_row(|a| a.add_button(open_button).add_button(delete_button))
-                    })
-            })
+                    .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
+                    .components(vec![CreateActionRow::Buttons(vec![
+                        open_button,
+                        delete_button,
+                    ])]),
+            )
             .await?;
 
         if reply
@@ -188,27 +192,32 @@ async fn send_file_preview(
             .unwrap_or(false)
         {
             reply
-                .edit(&ctx, |m| {
-                    m.remove_all_attachments()
-                        .attachment((file_content.as_bytes(), "preview.txt"))
-                })
+                .edit(
+                    &ctx,
+                    EditMessage::new().remove_all_attachments().attachment(
+                        CreateAttachment::bytes(file_content.as_bytes(), "preview.txt"),
+                    ),
+                )
                 .await?;
         }
     } else {
         msg.channel_id
-            .send_message(&ctx.http, |m| {
-                m.content(
-                    MessageBuilder::new()
-                        .push(file_preview.get_metadata_content())
-                        .push_codeblock_safe(file_content, file_preview.get_file_extension())
-                        .build(),
-                )
-                .reference_message(MessageReference::from(msg))
-                .allowed_mentions(|am| am.empty_parse())
-                .components(|c| {
-                    c.create_action_row(|a| a.add_button(open_button).add_button(delete_button))
-                })
-            })
+            .send_message(
+                &ctx.http,
+                CreateMessage::new()
+                    .content(
+                        MessageBuilder::new()
+                            .push(file_preview.get_metadata_content())
+                            .push_codeblock_safe(file_content, file_preview.get_file_extension())
+                            .build(),
+                    )
+                    .reference_message(MessageReference::from(msg))
+                    .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
+                    .components(vec![CreateActionRow::Buttons(vec![
+                        open_button,
+                        delete_button,
+                    ])]),
+            )
             .await?;
     }
 
@@ -261,7 +270,7 @@ pub async fn check_file_preview(
 
 pub async fn handle_delete_file_preview_button(
     ctx: &Context,
-    interaction: MessageComponentInteraction,
+    interaction: ComponentInteraction,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let author_id = interaction
         .data
@@ -276,9 +285,6 @@ pub async fn handle_delete_file_preview_button(
         return Ok(());
     }
 
-    interaction
-        .delete_original_interaction_response(ctx)
-        .await?;
-
+    interaction.delete_response(ctx).await?;
     Ok(())
 }

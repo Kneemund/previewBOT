@@ -1,9 +1,19 @@
 use std::env;
 
 use event_handler::Handler;
+use lazy_static::lazy_static;
 use serenity::{prelude::GatewayIntents, Client};
 
-mod event_handler;
+pub(crate) mod commands;
+pub(crate) mod event_handler;
+pub(crate) mod file_preview;
+
+lazy_static! {
+    pub(crate) static ref HTTP_CLIENT: reqwest::Client = reqwest::ClientBuilder::new()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36")
+        .build()
+        .unwrap();
+}
 
 #[tokio::main]
 async fn main() {
