@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::Write;
 
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Url;
 use serenity::all::{ButtonStyle, ComponentInteraction};
@@ -23,13 +23,14 @@ use self::github_repositoriy_file::GitHubRepositoryFilePreview;
 mod gist;
 mod github_repositoriy_file;
 
-lazy_static! {
-    static ref GITHUB_REPOSITORY_FILE_URL_REGEX: Regex =
-        Regex::new(r"https://github\.com(?:/[^/\s]+){2}/blob(?:/[^/\s]+)+#[^/\s]+").unwrap();
-    static ref GIST_URL_REGEX: Regex =
-        Regex::new(r"https://gist\.github\.com(?:/[^/\s]+){2}#file\-[^\s]+").unwrap();
-    static ref GITHUB_LINE_NUMBER_REGEX: Regex = Regex::new(r"L(\d+)").unwrap();
-}
+static GITHUB_REPOSITORY_FILE_URL_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"https://github\.com(?:/[^/\s]+){2}/blob(?:/[^/\s]+)+#[^/\s]+").unwrap()
+});
+
+static GIST_URL_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"https://gist\.github\.com(?:/[^/\s]+){2}#file\-[^\s]+").unwrap());
+
+static GITHUB_LINE_NUMBER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"L(\d+)").unwrap());
 
 trait FilePreview: Sync + Send {
     fn get_message_url(&self) -> &Url;

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -22,9 +22,7 @@ struct APIGistMetadata {
     // stylesheet: String,
 }
 
-lazy_static! {
-    static ref FILE_NAME_REGEX: Regex = Regex::new(r"file-([^L]+)").unwrap();
-}
+static FILE_NAME_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"file-([^L]+)").unwrap());
 
 #[derive(Debug)]
 pub struct GistFilePreview {

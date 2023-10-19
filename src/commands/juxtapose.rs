@@ -1,6 +1,5 @@
-use std::env;
 use std::error::Error;
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 use std::ops::{Deref, Range};
 
 use base64::engine::general_purpose;
@@ -21,6 +20,8 @@ use serenity::model::application::{CommandOptionType, ResolvedOption, ResolvedVa
 use serenity::prelude::Context;
 use tokio::try_join;
 
+use crate::{APIJuxtaposeResponse, SerenityRedisConnection, BLAKE3_JUXTAPOSE_KEY};
+
 static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
     let mut image_limits = Limits::default();
     image_limits.max_image_width = Some(4096);
@@ -33,15 +34,6 @@ static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
 static LABEL_FONT: Lazy<Font> = Lazy::new(|| {
     let font_data = include_bytes!("../../assets/font/RobotoCondensed-Regular.ttf");
     Font::try_from_bytes(font_data as &[u8]).unwrap()
-});
-
-static BLAKE3_JUXTAPOSE_KEY: Lazy<[u8; 32]> = Lazy::new(|| {
-    blake3::derive_key(
-        "utilBOT 2023-10-15 12:11:06 juxtapose MAC v1",
-        env::var("BLAKE3_KEY_MATERIAL")
-            .expect("BLAKE3_KEY_MATERIAL is missing.")
-            .as_bytes(),
-    )
 });
 
 async fn get_image_from_attachment(
@@ -290,20 +282,22 @@ pub async fn run(
             ctx,
             EditInteractionResponse::new()
                 .new_attachment(CreateAttachment::bytes(final_image_encoded, "preview.png"))
-                .new_attachment(left_image_create_attachment)
-                .new_attachment(right_image_create_attachment),
+                .new_attachment(left_image_create_attachment.description(left_label))
+                .new_attachment(right_image_create_attachment.description(right_label)),
         )
         .await?;
 
     /* Encode Data */
 
-    let mut data: Vec<u8> = Vec::new();
-    data.write_all(reply.id.get().to_le_bytes().as_slice())?;
-    data.write_all(reply.channel_id.get().to_le_bytes().as_slice())?;
+    // let mut data: Vec<u8> = Vec::new();
+    // data.extend_from_slice(reply.id.get().to_le_bytes().as_slice());
+    // data.extend_from_slice(interaction.channel_id.get().to_le_bytes().as_slice());
 
-    if let Some(guild_id) = reply.guild_id {
-        data.write_all(guild_id.get().to_le_bytes().as_slice())?;
-    }
+    let data = [
+        reply.id.get().to_le_bytes(),
+        interaction.channel_id.get().to_le_bytes(),
+    ]
+    .concat();
 
     let mut mac = [0u8; 16];
 
@@ -312,28 +306,15 @@ pub async fn run(
         .finalize_xof()
         .fill(&mut mac);
 
-    // TOOO: compare using
-    // constant_time_eq::constant_time_eq_16(a, b)
-
-    let mut juxtapose_url_data = String::new();
-    general_purpose::URL_SAFE_NO_PAD.encode_string(data.as_slice(), &mut juxtapose_url_data);
-
-    let mut juxtapose_url_mac = String::new();
-    general_purpose::URL_SAFE_NO_PAD.encode_string(mac.as_slice(), &mut juxtapose_url_mac);
+    let juxtapose_url_data = general_purpose::URL_SAFE_NO_PAD.encode(data.as_slice());
+    let juxtapose_url_mac = general_purpose::URL_SAFE_NO_PAD.encode(mac.as_slice());
 
     let juxtapose_url = reqwest::Url::parse_with_params(
         "https://juxtapose.kneemund.de/v1",
         &[
-            ("d", juxtapose_url_data),
-            ("m", juxtapose_url_mac),
-            (
-                "o",
-                if is_vertical {
-                    String::from("v")
-                } else {
-                    String::from("h")
-                },
-            ),
+            ("d", juxtapose_url_data.as_str()),
+            ("m", juxtapose_url_mac.as_str()),
+            ("o", if is_vertical { "v" } else { "h" }),
         ],
     )
     .unwrap();
@@ -348,6 +329,26 @@ pub async fn run(
             ])]),
         )
         .await?;
+
+    let mut redis_connection_manager = ctx
+        .data
+        .read()
+        .await
+        .get::<SerenityRedisConnection>()
+        .unwrap()
+        .to_owned();
+
+    let juxtapose_cache_data = APIJuxtaposeResponse {
+        left_image_url: left_image_attachment.url.to_owned(),
+        right_image_url: right_image_attachment.url.to_owned(),
+        left_image_label: left_label.map(|s| s.to_owned()),
+        right_image_label: right_label.map(|s| s.to_owned()),
+    };
+
+    juxtapose_cache_data
+        .redis_cache_set(&mut redis_connection_manager, juxtapose_url_data.as_str())
+        .await
+        .unwrap();
 
     Ok(())
 }
