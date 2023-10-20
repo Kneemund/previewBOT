@@ -111,7 +111,7 @@ pub async fn run(
             ResolvedOption {
                 value: ResolvedValue::String(string),
                 ..
-            } => Some(string.to_owned()),
+            } => Some((*string).to_owned()),
             _ => None,
         });
 
@@ -123,7 +123,7 @@ pub async fn run(
             ResolvedOption {
                 value: ResolvedValue::String(string),
                 ..
-            } => Some(string.to_owned()),
+            } => Some((*string).to_owned()),
             _ => None,
         });
 
@@ -196,7 +196,7 @@ pub async fn run(
 
     let label_margin = (right_image_min_dimension as i32) / 64;
 
-    if let Some(left_label) = left_label {
+    if let Some(ref left_label) = left_label {
         let (label_width, label_height) = text_size(label_scale, &LABEL_FONT, left_label);
 
         draw_filled_rect_mut(
@@ -223,7 +223,7 @@ pub async fn run(
         )
     }
 
-    if let Some(right_label) = right_label {
+    if let Some(ref right_label) = right_label {
         let (label_width, label_height) = text_size(label_scale, &LABEL_FONT, right_label);
 
         draw_filled_rect_mut(
@@ -282,8 +282,8 @@ pub async fn run(
             ctx,
             EditInteractionResponse::new()
                 .new_attachment(CreateAttachment::bytes(final_image_encoded, "preview.png"))
-                .new_attachment(left_image_create_attachment.description(left_label))
-                .new_attachment(right_image_create_attachment.description(right_label)),
+                .new_attachment(left_image_create_attachment.description(left_label.clone()))
+                .new_attachment(right_image_create_attachment.description(right_label.clone())),
         )
         .await?;
 
@@ -341,8 +341,8 @@ pub async fn run(
     let juxtapose_cache_data = APIJuxtaposeResponse {
         left_image_url: left_image_attachment.url.to_owned(),
         right_image_url: right_image_attachment.url.to_owned(),
-        left_image_label: left_label.map(|s| s.to_owned()),
-        right_image_label: right_label.map(|s| s.to_owned()),
+        left_image_label: left_label,
+        right_image_label: right_label,
     };
 
     juxtapose_cache_data
