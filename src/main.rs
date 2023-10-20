@@ -3,10 +3,11 @@ use std::env;
 use std::error::Error;
 use std::mem::size_of;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 
-use axum::extract::State;
-use axum::http::StatusCode;
+use axum::extract::{Query, State};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::response::IntoResponse;
 use axum::Json;
 use base64::{engine::general_purpose, Engine};
 use event_handler::Handler;
@@ -73,11 +74,28 @@ impl APIJuxtaposeResponse {
         Ok(right_ts.min(left_ts))
     }
 
+    fn get_cache_headers(expire_unix_ts: u64) -> HeaderMap {
+        HeaderMap::from_iter([
+            (
+                axum::http::header::EXPIRES,
+                httpdate::fmt_http_date(
+                    SystemTime::UNIX_EPOCH + Duration::from_secs(expire_unix_ts),
+                )
+                .parse()
+                .unwrap(),
+            ),
+            (
+                axum::http::header::CACHE_CONTROL,
+                HeaderValue::from_static("public, must-revalidate, immutable"),
+            ),
+        ])
+    }
+
     async fn redis_cache_set(
         &self,
         connection: &mut redis::aio::ConnectionManager,
         key: &str,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<usize, StatusCode> {
         let mut data = vec![
             ("left_image", self.left_image_url.as_str()),
             ("right_image", self.right_image_url.as_str()),
@@ -96,24 +114,28 @@ impl APIJuxtaposeResponse {
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        connection
-            .expire_at(
-                key,
-                self.get_expire_unix_ts().map_err(|err| {
-                    println!("Error while getting expire timestamp: {:?}", err);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?,
-            )
-            .await
-            .map_err(|err| {
-                println!("Error while setting expire timestamp: {:?}", err);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+        let unix_ts = self.get_expire_unix_ts().map_err(|err| {
+            println!("Error while getting expire timestamp: {:?}", err);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-        Ok(())
+        connection.expire_at(key, unix_ts).await.map_err(|err| {
+            println!("Error while setting expire timestamp: {:?}", err);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        // let expire_time = SystemTime::UNIX_EPOCH + Duration::from_secs(unix_ts as u64);
+        // let expire_seconds = expire_time
+        //     .duration_since(SystemTime::now())
+        //     .map(|duration| duration.as_secs())
+        //     .unwrap_or(0);
+
+        // Ok(expire_seconds)
+
+        Ok(unix_ts)
     }
 
-    async fn redis_cache_get(
+    async fn redis_cache_get_data(
         connection: &mut redis::aio::ConnectionManager,
         key: &str,
     ) -> Option<Self> {
@@ -136,29 +158,50 @@ impl APIJuxtaposeResponse {
                 }
             })
     }
+
+    async fn redis_cache_get_expire(
+        connection: &mut redis::aio::ConnectionManager,
+        key: &str,
+    ) -> Result<usize, StatusCode> {
+        redis::cmd("EXPIRETIME")
+            .arg(key)
+            .query_async(connection)
+            .await
+            .map_err(|err| {
+                println!("Error while getting expire timestamp: {:?}", err);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })
+
+        // connection.ttl(key).await.map_err(|err| {
+        //     println!("Error while getting expire timestamp: {:?}", err);
+        //     StatusCode::INTERNAL_SERVER_ERROR
+        // })
+    }
 }
 
 #[derive(Debug, Deserialize)]
 struct APIJuxtaposeRequest {
+    #[serde(rename = "d")]
     data: String,
+    #[serde(rename = "m")]
     mac: String,
 }
 
-async fn juxtapose_v1_handler(
+async fn juxtapose_url_handler(
     State(JuxtaposeEndpointState {
         serenity_http,
         mut redis_connection_manager,
     }): State<JuxtaposeEndpointState>,
-    Json(body): Json<APIJuxtaposeRequest>,
-) -> Result<Json<APIJuxtaposeResponse>, StatusCode> {
+    Query(params): Query<APIJuxtaposeRequest>,
+) -> Result<(HeaderMap, impl IntoResponse), StatusCode> /* (StatusCode, &'static str) */ {
     let time = Instant::now();
 
     let data_bytes = general_purpose::URL_SAFE_NO_PAD
-        .decode(body.data.as_str())
+        .decode(params.data.as_str())
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let mac_bytes = general_purpose::URL_SAFE_NO_PAD
-        .decode(body.mac)
+        .decode(params.mac)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let mac_bytes: &[u8; 16] = mac_bytes
@@ -179,12 +222,24 @@ async fn juxtapose_v1_handler(
     println!("MAC check took {:?}.", time.elapsed());
 
     // TODO: function for this
-    if let Some(response_data) =
-        APIJuxtaposeResponse::redis_cache_get(&mut redis_connection_manager, body.data.as_str())
-            .await
+    if let Some(response_data) = APIJuxtaposeResponse::redis_cache_get_data(
+        &mut redis_connection_manager,
+        params.data.as_str(),
+    )
+    .await
     {
+        let expire_unix_ts = APIJuxtaposeResponse::redis_cache_get_expire(
+            &mut redis_connection_manager,
+            params.data.as_str(),
+        )
+        .await?;
+
         println!("Redis took {:?}.", time.elapsed());
-        Ok(Json(response_data))
+
+        Ok((
+            APIJuxtaposeResponse::get_cache_headers(expire_unix_ts as u64),
+            Json(response_data),
+        ))
     } else {
         // TODO: no unwrap
         let mut data_ids = data_bytes
@@ -197,7 +252,7 @@ async fn juxtapose_v1_handler(
         let juxtapose_message = serenity_http
             .get_message(channel_id, message_id)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|_| StatusCode::NOT_FOUND)?;
 
         // TODO: verify message author
 
@@ -220,11 +275,14 @@ async fn juxtapose_v1_handler(
 
         println!("Serenity took {:?}.", time.elapsed());
 
-        response_data
-            .redis_cache_set(&mut redis_connection_manager, body.data.as_str())
+        let expire_unix_ts = response_data
+            .redis_cache_set(&mut redis_connection_manager, params.data.as_str())
             .await?;
 
-        Ok(Json(response_data))
+        Ok((
+            APIJuxtaposeResponse::get_cache_headers(expire_unix_ts as u64),
+            Json(response_data),
+        ))
     }
 }
 
@@ -275,8 +333,8 @@ async fn main() {
     //     );
 
     let app = axum::Router::new().route(
-        "/v1",
-        axum::routing::post(juxtapose_v1_handler)
+        "/v1/url",
+        axum::routing::get(juxtapose_url_handler)
             .with_state(JuxtaposeEndpointState {
                 redis_connection_manager,
                 serenity_http: serenity_client.http.clone(),
