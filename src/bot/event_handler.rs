@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use serenity::all::Command;
 use serenity::all::ComponentInteractionDataKind;
 use serenity::all::Interaction;
@@ -8,11 +6,11 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
-use crate::commands;
-use crate::file_preview::check_file_preview;
-use crate::file_preview::handle_delete_file_preview_button;
-
 pub struct Handler;
+
+use super::commands;
+use super::file_preview::check_file_preview;
+use super::file_preview::handle_delete_file_preview_button;
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -21,32 +19,11 @@ impl EventHandler for Handler {
             return;
         }
 
-        let time = Instant::now();
-
         check_file_preview(&ctx, &mut msg)
             .await
             .unwrap_or_else(|error| {
                 println!("Error while checking file preview: {:?}", error);
             });
-
-        println!("Time: {:?}", time.elapsed());
-
-        // let message_id = MessageId::from_str("1162145068455563264").unwrap();
-        // let is_vertical = false;
-        // let mut encoded_data = String::new();
-        // general_purpose::URL_SAFE_NO_PAD
-        //     .encode_string(message_id.get().to_le_bytes(), &mut encoded_data);
-        // general_purpose::URL_SAFE_NO_PAD
-        //     .encode_string(message_id.get().to_le_bytes(), &mut encoded_data);
-        // general_purpose::URL_SAFE_NO_PAD
-        //     .encode_string(message_id.get().to_le_bytes(), &mut encoded_data);
-        // general_purpose::URL_SAFE_NO_PAD.encode_string(&[is_vertical as u8], &mut encoded_data);
-        // general_purpose::URL_SAFE_NO_PAD
-        //     .encode_string("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww", &mut encoded_data);
-        // general_purpose::URL_SAFE_NO_PAD
-        //     .encode_string("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww", &mut encoded_data);
-
-        // println!("Encoded data: {}", encoded_data);
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {

@@ -20,7 +20,8 @@ use serenity::model::application::{CommandOptionType, ResolvedOption, ResolvedVa
 use serenity::prelude::Context;
 use tokio::try_join;
 
-use crate::{APIJuxtaposeResponse, SerenityRedisConnection, BLAKE3_JUXTAPOSE_KEY};
+use crate::web::api_juxtapose_response::APIJuxtaposeResponse;
+use crate::{SerenityRedisConnection, BLAKE3_JUXTAPOSE_KEY, HTTP_CLIENT};
 
 static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
     let mut image_limits = Limits::default();
@@ -32,12 +33,14 @@ static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
 });
 
 static LABEL_FONT: Lazy<Font> = Lazy::new(|| {
-    let font_data = include_bytes!("../../assets/font/RobotoCondensed-Regular.ttf");
+    let font_data = include_bytes!("../../../assets/font/RobotoCondensed-Regular.ttf");
     Font::try_from_bytes(font_data as &[u8]).unwrap()
 });
 
 async fn get_image_from_attachment(
     attachment: &Attachment,
+    image_width: u32,
+    image_height: u32,
 ) -> Result<(Blend<DynamicImage>, CreateAttachment), Box<dyn Error + Send + Sync>> {
     let image_mime = attachment
         .content_type
@@ -47,7 +50,13 @@ async fn get_image_from_attachment(
     let image_format = ImageFormat::from_mime_type(image_mime)
         .ok_or("Failed to retrieve image format from MIME type of image.")?;
 
-    let image_bytes = attachment.download().await?;
+    let mut image_url = reqwest::Url::parse(attachment.proxy_url.as_str()).unwrap();
+    image_url.query_pairs_mut().extend_pairs(&[
+        ("width", image_width.to_string()),
+        ("height", image_height.to_string()),
+    ]);
+
+    let image_bytes = HTTP_CLIENT.get(image_url).send().await?.bytes().await?;
 
     let mut image_reader = image::io::Reader::new(Cursor::new(&image_bytes));
     image_reader.set_format(image_format);
@@ -161,14 +170,17 @@ pub async fn run(
         .height
         .ok_or("Failed to retrieve height of right image.")?;
 
-    if IMAGE_LIMITS
-        .check_dimensions(left_image_width, left_image_height)
-        .is_err()
-        || IMAGE_LIMITS
-            .check_dimensions(right_image_width, right_image_height)
-            .is_err()
-    {
-        return Err("The images must not be bigger than 4096x4096 pixels.".into());
+    let mut preview_image_width = left_image_width.min(right_image_width);
+    let mut preview_image_height = left_image_height.min(right_image_height);
+
+    const PREVIEW_IMAGE_MAX_SIZE: u32 = 4096;
+    let preview_image_max_dimension = preview_image_width.max(preview_image_height);
+
+    if preview_image_max_dimension > PREVIEW_IMAGE_MAX_SIZE {
+        let scale = PREVIEW_IMAGE_MAX_SIZE as f32 / preview_image_max_dimension as f32;
+
+        preview_image_width = (preview_image_width as f32 * scale) as u32;
+        preview_image_height = (preview_image_height as f32 * scale) as u32;
     }
 
     /* Defer Interaction */
@@ -181,20 +193,26 @@ pub async fn run(
         (mut left_image, left_image_create_attachment),
         (mut right_image, right_image_create_attachment),
     ) = try_join!(
-        get_image_from_attachment(left_image_attachment),
-        get_image_from_attachment(right_image_attachment)
+        get_image_from_attachment(
+            left_image_attachment,
+            preview_image_width,
+            preview_image_height
+        ),
+        get_image_from_attachment(
+            right_image_attachment,
+            preview_image_width,
+            preview_image_height
+        )
     )?;
 
-    let time = std::time::Instant::now();
-
-    let right_image_min_dimension = right_image_width.min(right_image_height);
+    let preview_image_min_dimension = preview_image_width.min(preview_image_height);
 
     let label_scale = Scale {
-        x: (right_image_min_dimension as f32) / 24.0,
-        y: (right_image_min_dimension as f32) / 24.0,
+        x: (preview_image_min_dimension as f32) / 24.0,
+        y: (preview_image_min_dimension as f32) / 24.0,
     };
 
-    let label_margin = (right_image_min_dimension as i32) / 64;
+    let label_margin = (preview_image_min_dimension as i32) / 64;
 
     if let Some(ref left_label) = left_label {
         let (label_width, label_height) = text_size(label_scale, &LABEL_FONT, left_label);
@@ -203,7 +221,7 @@ pub async fn run(
             &mut left_image,
             Rect::at(
                 0,
-                (right_image_height as i32) - (label_height + 2 * label_margin),
+                (preview_image_height as i32) - (label_height + 2 * label_margin),
             )
             .of_size(
                 (label_width + 2 * label_margin) as u32,
@@ -216,7 +234,7 @@ pub async fn run(
             &mut left_image.0,
             Rgba::white(),
             label_margin,
-            (right_image_height as i32) - (label_height + label_margin),
+            (preview_image_height as i32) - (label_height + label_margin),
             label_scale,
             &LABEL_FONT,
             left_label,
@@ -229,8 +247,8 @@ pub async fn run(
         draw_filled_rect_mut(
             &mut right_image,
             Rect::at(
-                (right_image_width as i32) - (label_width + 2 * label_margin),
-                (right_image_height as i32) - (label_height + 2 * label_margin),
+                (preview_image_width as i32) - (label_width + 2 * label_margin),
+                (preview_image_height as i32) - (label_height + 2 * label_margin),
             )
             .of_size(
                 (label_width + 2 * label_margin) as u32,
@@ -242,8 +260,8 @@ pub async fn run(
         draw_text_mut(
             &mut right_image.0,
             Rgba::white(),
-            (right_image_width as i32) - (label_width + label_margin),
-            (right_image_height as i32) - (label_height + label_margin),
+            (preview_image_width as i32) - (label_width + label_margin),
+            (preview_image_height as i32) - (label_height + label_margin),
             label_scale,
             &LABEL_FONT,
             right_label,
@@ -252,11 +270,11 @@ pub async fn run(
 
     let left_image_view = left_image
         .0
-        .view(0, 0, left_image_width / 2, left_image_height);
+        .view(0, 0, preview_image_width / 2, preview_image_height);
     right_image.0.copy_from(left_image_view.deref(), 0, 0)?;
 
-    let vertical_line_center = right_image_width / 2;
-    let vertical_line_extent = (right_image_width / 1000).max(1);
+    let vertical_line_center = preview_image_width / 2;
+    let vertical_line_extent = (preview_image_width / 1000).max(1);
     draw_vertical_line_mut(
         &mut right_image.0,
         (vertical_line_center - vertical_line_extent)
@@ -273,8 +291,6 @@ pub async fn run(
         )
         .map_err(|error| format!("Failed to encode image: {}", error))?;
 
-    println!("Image processing took {:?}.", time.elapsed());
-
     /* Reply */
 
     let reply = interaction
@@ -288,10 +304,6 @@ pub async fn run(
         .await?;
 
     /* Encode Data */
-
-    // let mut data: Vec<u8> = Vec::new();
-    // data.extend_from_slice(reply.id.get().to_le_bytes().as_slice());
-    // data.extend_from_slice(interaction.channel_id.get().to_le_bytes().as_slice());
 
     let data = [
         reply.id.get().to_le_bytes(),
@@ -310,7 +322,7 @@ pub async fn run(
     let juxtapose_url_mac = general_purpose::URL_SAFE_NO_PAD.encode(mac.as_slice());
 
     let juxtapose_url = reqwest::Url::parse_with_params(
-        "https://juxtapose.kneemund.de/v1",
+        "https://juxtapose.kneemund.de/",
         &[
             ("d", juxtapose_url_data.as_str()),
             ("m", juxtapose_url_mac.as_str()),
