@@ -7,7 +7,7 @@ on:
 name: Build for arm64
 
 jobs:
-  check:
+  build:
     runs-on: ubuntu-22.04
     steps:
       - name: Install Dependencies

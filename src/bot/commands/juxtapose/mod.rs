@@ -1,24 +1,27 @@
 use std::io::Cursor;
-use std::ops::{Deref, Range};
+use std::ops::Deref;
 
 use base64::engine::general_purpose;
 use base64::Engine;
 use image::io::Limits;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageFormat, ImageOutputFormat, Rgba};
 use imageproc::definitions::HasWhite;
-use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut, text_size, Blend};
-use imageproc::rect::Rect;
+use imageproc::drawing::Blend;
 use once_cell::sync::Lazy;
-use rusttype::{Font, Scale};
+use rusttype::Scale;
 use serenity::all::{Attachment, CommandInteraction};
 use serenity::builder::{CreateActionRow, CreateAttachment, CreateButton, EditInteractionResponse};
 use serenity::model::application::{ResolvedOption, ResolvedValue};
 use serenity::prelude::Context;
 use tokio::try_join;
 
+use crate::bot::commands::juxtapose::preview::{
+    draw_horizontal_line_mut, draw_label, draw_vertical_line_mut, LabelPosition,
+};
 use crate::web::api_juxtapose_response::APIJuxtaposeResponse;
 use crate::{SerenityRedisConnection, BLAKE3_JUXTAPOSE_KEY, HTTP_CLIENT};
 
+mod preview;
 mod structure;
 pub(crate) use structure::register;
 
@@ -29,11 +32,6 @@ static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
     image_limits.max_alloc = Some(32 * 1024 * 1024);
 
     image_limits
-});
-
-static LABEL_FONT: Lazy<Font> = Lazy::new(|| {
-    let font_data = include_bytes!("../../../../assets/font/RobotoCondensed-Regular.ttf");
-    Font::try_from_bytes(font_data as &[u8]).unwrap()
 });
 
 async fn get_image_from_attachment(
@@ -79,14 +77,6 @@ async fn get_image_from_attachment(
         Blend(image),
         CreateAttachment::bytes(image_bytes, attachment.filename.as_str()),
     ))
-}
-
-pub fn draw_vertical_line_mut(image: &mut DynamicImage, line: Range<u32>, color: Rgba<u8>) {
-    for y in 0..image.height() {
-        for x in line.clone() {
-            image.put_pixel(x, y, color);
-        }
-    }
 }
 
 pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), String> {
@@ -170,16 +160,16 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
 
     let left_image_width = left_image_attachment
         .width
-        .ok_or("Failed to retrieve width of left image.")?;
+        .ok_or("Failed to retrieve width of left (top) image.")?;
     let left_image_height = left_image_attachment
         .height
-        .ok_or("Failed to retrieve height of left image.")?;
+        .ok_or("Failed to retrieve height of left (top) image.")?;
     let right_image_width = right_image_attachment
         .width
-        .ok_or("Failed to retrieve width of right image.")?;
+        .ok_or("Failed to retrieve width of right (bottom) image.")?;
     let right_image_height = right_image_attachment
         .height
-        .ok_or("Failed to retrieve height of right image.")?;
+        .ok_or("Failed to retrieve height of right (bottom) image.")?;
 
     let mut preview_image_width = left_image_width.min(right_image_width);
     let mut preview_image_height = left_image_height.min(right_image_height);
@@ -222,76 +212,67 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     let label_margin = (preview_image_min_dimension as i32) / 64;
 
     if let Some(ref left_label) = left_label {
-        let (label_width, label_height) = text_size(label_scale, &LABEL_FONT, left_label);
-
-        draw_filled_rect_mut(
+        draw_label(
             &mut left_image,
-            Rect::at(
-                0,
-                (preview_image_height as i32) - (label_height + 2 * label_margin),
-            )
-            .of_size(
-                (label_width + 2 * label_margin) as u32,
-                (label_height + 2 * label_margin) as u32,
-            ),
-            Rgba([0, 0, 0, 128]),
-        );
-
-        draw_text_mut(
-            &mut left_image.0,
-            Rgba::white(),
-            label_margin,
-            (preview_image_height as i32) - (label_height + label_margin),
+            if is_vertical {
+                LabelPosition::TopLeft
+            } else {
+                LabelPosition::BottomLeft
+            },
             label_scale,
-            &LABEL_FONT,
             left_label,
-        )
+            label_margin,
+        );
     }
 
     if let Some(ref right_label) = right_label {
-        let (label_width, label_height) = text_size(label_scale, &LABEL_FONT, right_label);
-
-        draw_filled_rect_mut(
+        draw_label(
             &mut right_image,
-            Rect::at(
-                (preview_image_width as i32) - (label_width + 2 * label_margin),
-                (preview_image_height as i32) - (label_height + 2 * label_margin),
-            )
-            .of_size(
-                (label_width + 2 * label_margin) as u32,
-                (label_height + 2 * label_margin) as u32,
-            ),
-            Rgba([0, 0, 0, 128]),
-        );
-
-        draw_text_mut(
-            &mut right_image.0,
-            Rgba::white(),
-            (preview_image_width as i32) - (label_width + label_margin),
-            (preview_image_height as i32) - (label_height + label_margin),
+            if is_vertical {
+                LabelPosition::BottomLeft
+            } else {
+                LabelPosition::BottomRight
+            },
             label_scale,
-            &LABEL_FONT,
             right_label,
-        )
+            label_margin,
+        );
     }
 
-    let left_image_view = left_image
-        .0
-        .view(0, 0, preview_image_width / 2, preview_image_height);
+    let left_image_view = if is_vertical {
+        left_image
+            .0
+            .view(0, 0, preview_image_width, preview_image_height / 2)
+    } else {
+        left_image
+            .0
+            .view(0, 0, preview_image_width / 2, preview_image_height)
+    };
 
     right_image
         .0
         .copy_from(left_image_view.deref(), 0, 0)
-        .map_err(|_| "Failed to overlay left image onto right image.")?;
+        .map_err(|_| "Failed to overlay left (top) image onto right (bottom) image.")?;
 
-    let vertical_line_center = preview_image_width / 2;
-    let vertical_line_extent = (preview_image_width / 1000).max(1);
-    draw_vertical_line_mut(
-        &mut right_image.0,
-        (vertical_line_center - vertical_line_extent)
-            ..(vertical_line_center + vertical_line_extent),
-        Rgba::white(),
-    );
+    if is_vertical {
+        let horizontal_line_center = preview_image_height / 2;
+        let horizontal_line_extent = (preview_image_height / 1000).max(1);
+        draw_horizontal_line_mut(
+            &mut right_image.0,
+            (horizontal_line_center - horizontal_line_extent)
+                ..(horizontal_line_center + horizontal_line_extent),
+            Rgba::white(),
+        );
+    } else {
+        let vertical_line_center = preview_image_width / 2;
+        let vertical_line_extent = (preview_image_width / 1000).max(1);
+        draw_vertical_line_mut(
+            &mut right_image.0,
+            (vertical_line_center - vertical_line_extent)
+                ..(vertical_line_center + vertical_line_extent),
+            Rgba::white(),
+        );
+    }
 
     let mut final_image_encoded = Vec::new();
     right_image
