@@ -54,7 +54,7 @@ impl GistFilePreview {
                 .captures(
                     message_url
                         .fragment()
-                        .expect("The specified URL is malformed."),
+                        .ok_or("The specified URL is malformed.")?,
                 )
                 .ok_or("File name not found.")?[1],
         );

@@ -47,6 +47,10 @@ async fn get_image_from_attachment(
     let image_format = ImageFormat::from_mime_type(image_mime)
         .ok_or("Failed to retrieve image format from MIME type of image.")?;
 
+    if !image_format.can_read() {
+        return Err("The image format is not supported.".to_owned());
+    }
+
     let image_url = reqwest::Url::parse_with_params(
         attachment.proxy_url.as_str(),
         &[
@@ -54,7 +58,7 @@ async fn get_image_from_attachment(
             ("height", image_height.to_string()),
         ],
     )
-    .unwrap();
+    .map_err(|_| "Failed to parse attachment URL.")?;
 
     let image_bytes = HTTP_CLIENT
         .get(image_url)
@@ -155,21 +159,21 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     if left_image_attachment.size > 16 * 1024 * 1024
         || right_image_attachment.size > 16 * 1024 * 1024
     {
-        return Err("The images must not be bigger than 16 MB.".into());
+        return Err("The images must not be bigger than 16 MB.".to_owned());
     }
 
     let left_image_width = left_image_attachment
         .width
-        .ok_or("Failed to retrieve width of left (top) image.")?;
+        .ok_or("The left (top) attachment is not a supported image.")?;
     let left_image_height = left_image_attachment
         .height
-        .ok_or("Failed to retrieve height of left (top) image.")?;
+        .ok_or("The left (top) attachment is not a supported image.")?;
     let right_image_width = right_image_attachment
         .width
-        .ok_or("Failed to retrieve width of right (bottom) image.")?;
+        .ok_or("The right (bottom) attachment is not a supported image.")?;
     let right_image_height = right_image_attachment
         .height
-        .ok_or("Failed to retrieve height of right (bottom) image.")?;
+        .ok_or("The right (bottom) attachment is not a supported image.")?;
 
     let mut preview_image_width = left_image_width.min(right_image_width);
     let mut preview_image_height = left_image_height.min(right_image_height);
@@ -322,7 +326,7 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
             ("o", if is_vertical { "v" } else { "h" }),
         ],
     )
-    .unwrap();
+    .map_err(|_| "Failed to parse juxtapose URL.")?;
 
     interaction
         .edit_response(

@@ -135,15 +135,21 @@ async fn send_file_preview(
         .len()
         .max(1);
 
+    let file_content_capacity = selected_content_lines
+        .iter()
+        .map(|line| line.len())
+        .sum::<usize>()
+        + selected_content_lines.len() * (line_number_length + 4);
+
     let file_content = selected_content_lines.iter().enumerate().fold(
-        String::new(),
+        String::with_capacity(file_content_capacity),
         |mut output, (index, line)| {
             let _ = writeln!(
                 output,
-                "{:line_number_width$} | {}",
+                "{:width$} | {}",
                 top_line_number + index as u32,
                 line,
-                line_number_width = line_number_length
+                width = line_number_length
             );
 
             output

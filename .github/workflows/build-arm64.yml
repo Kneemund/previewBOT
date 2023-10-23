@@ -25,11 +25,10 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: target/
-          # /cargo-home/bin/
-          # /cargo-home/registry/index/
-          # /cargo-home/registry/cache/
-          # /cargo-home/git/db/
+          path: |
+            target/
+            ~/.cargo/registry/
+            ~/.cargo/git/
           key: cargo-${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}-${{ github.workflow_sha }}
           restore-keys: cargo-${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}
       - name: Compile

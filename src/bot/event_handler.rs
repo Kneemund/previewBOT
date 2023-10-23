@@ -22,11 +22,9 @@ impl EventHandler for Handler {
             return;
         }
 
-        check_file_preview(&ctx, &mut msg)
-            .await
-            .unwrap_or_else(|error| {
-                println!("Error while checking file preview: {:?}", error);
-            });
+        if let Err(error) = check_file_preview(&ctx, &mut msg).await {
+            println!("Error while checking file preview: {:?}", error);
+        }
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -39,14 +37,14 @@ impl EventHandler for Handler {
                             .custom_id
                             .starts_with("deleteFilePreview")
                         {
-                            handle_delete_file_preview_button(&ctx, component_interaction)
-                                .await
-                                .unwrap_or_else(|error| {
-                                    println!(
-                                        "Error while handling delete file preview button: {:?}",
-                                        error
-                                    );
-                                });
+                            if let Err(error) =
+                                handle_delete_file_preview_button(&ctx, component_interaction).await
+                            {
+                                println!(
+                                    "Error while handling delete file preview button: {:?}",
+                                    error
+                                );
+                            }
                         }
                     }
                     _ => {}
@@ -62,7 +60,7 @@ impl EventHandler for Handler {
                                     EditInteractionResponse::new().add_embed(
                                         CreateEmbed::new()
                                             .title("Error")
-                                            .colour(Colour::DARK_RED)
+                                            .colour(Colour::RED)
                                             .description(error),
                                     ),
                                 )
