@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::io::Cursor;
 use std::ops::{Deref, Range};
 
@@ -12,16 +11,16 @@ use imageproc::rect::Rect;
 use once_cell::sync::Lazy;
 use rusttype::{Font, Scale};
 use serenity::all::{Attachment, CommandInteraction};
-use serenity::builder::{
-    CreateActionRow, CreateAttachment, CreateButton, CreateCommand, CreateCommandOption,
-    EditInteractionResponse,
-};
-use serenity::model::application::{CommandOptionType, ResolvedOption, ResolvedValue};
+use serenity::builder::{CreateActionRow, CreateAttachment, CreateButton, EditInteractionResponse};
+use serenity::model::application::{ResolvedOption, ResolvedValue};
 use serenity::prelude::Context;
 use tokio::try_join;
 
 use crate::web::api_juxtapose_response::APIJuxtaposeResponse;
 use crate::{SerenityRedisConnection, BLAKE3_JUXTAPOSE_KEY, HTTP_CLIENT};
+
+mod structure;
+pub(crate) use structure::register;
 
 static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
     let mut image_limits = Limits::default();
@@ -33,7 +32,7 @@ static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
 });
 
 static LABEL_FONT: Lazy<Font> = Lazy::new(|| {
-    let font_data = include_bytes!("../../../assets/font/RobotoCondensed-Regular.ttf");
+    let font_data = include_bytes!("../../../../assets/font/RobotoCondensed-Regular.ttf");
     Font::try_from_bytes(font_data as &[u8]).unwrap()
 });
 
@@ -41,7 +40,7 @@ async fn get_image_from_attachment(
     attachment: &Attachment,
     image_width: u32,
     image_height: u32,
-) -> Result<(Blend<DynamicImage>, CreateAttachment), Box<dyn Error + Send + Sync>> {
+) -> Result<(Blend<DynamicImage>, CreateAttachment), String> {
     let image_mime = attachment
         .content_type
         .clone()
@@ -50,13 +49,23 @@ async fn get_image_from_attachment(
     let image_format = ImageFormat::from_mime_type(image_mime)
         .ok_or("Failed to retrieve image format from MIME type of image.")?;
 
-    let mut image_url = reqwest::Url::parse(attachment.proxy_url.as_str()).unwrap();
-    image_url.query_pairs_mut().extend_pairs(&[
-        ("width", image_width.to_string()),
-        ("height", image_height.to_string()),
-    ]);
+    let image_url = reqwest::Url::parse_with_params(
+        attachment.proxy_url.as_str(),
+        &[
+            ("width", image_width.to_string()),
+            ("height", image_height.to_string()),
+        ],
+    )
+    .unwrap();
 
-    let image_bytes = HTTP_CLIENT.get(image_url).send().await?.bytes().await?;
+    let image_bytes = HTTP_CLIENT
+        .get(image_url)
+        .send()
+        .await
+        .map_err(|_| "Failed to fetch image from CDN.")?
+        .bytes()
+        .await
+        .map_err(|_| "Failed to receive image data from CDN.")?;
 
     let mut image_reader = image::io::Reader::new(Cursor::new(&image_bytes));
     image_reader.set_format(image_format);
@@ -80,12 +89,7 @@ pub fn draw_vertical_line_mut(image: &mut DynamicImage, line: Range<u32>, color:
     }
 }
 
-pub async fn run(
-    ctx: &Context,
-    interaction: &CommandInteraction,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    // TODO: check to_owned() - maybe better solution that doesn't require cloning
-
+pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), String> {
     let left_image_attachment = interaction
         .data
         .options()
@@ -94,7 +98,7 @@ pub async fn run(
             ResolvedOption {
                 value: ResolvedValue::Attachment(attachment),
                 ..
-            } => Some(attachment.to_owned()),
+            } => Some(*attachment),
             _ => None,
         })
         .unwrap();
@@ -107,7 +111,7 @@ pub async fn run(
             ResolvedOption {
                 value: ResolvedValue::Attachment(attachment),
                 ..
-            } => Some(attachment.to_owned()),
+            } => Some(*attachment),
             _ => None,
         })
         .unwrap();
@@ -144,10 +148,17 @@ pub async fn run(
             ResolvedOption {
                 value: ResolvedValue::Boolean(boolean),
                 ..
-            } => Some(boolean.to_owned()),
+            } => Some(*boolean),
             _ => None,
         })
         .unwrap_or(false);
+
+    /* Defer Interaction */
+
+    if let Err(error) = interaction.defer(ctx).await {
+        println!("Failed to defer juxtapose interaction: {:?}", error);
+        return Ok(());
+    }
 
     /* Limit Image Size and Dimensions */
 
@@ -182,10 +193,6 @@ pub async fn run(
         preview_image_width = (preview_image_width as f32 * scale) as u32;
         preview_image_height = (preview_image_height as f32 * scale) as u32;
     }
-
-    /* Defer Interaction */
-
-    interaction.defer(ctx).await?;
 
     /* Download and Process Images */
 
@@ -271,7 +278,11 @@ pub async fn run(
     let left_image_view = left_image
         .0
         .view(0, 0, preview_image_width / 2, preview_image_height);
-    right_image.0.copy_from(left_image_view.deref(), 0, 0)?;
+
+    right_image
+        .0
+        .copy_from(left_image_view.deref(), 0, 0)
+        .map_err(|_| "Failed to overlay left image onto right image.")?;
 
     let vertical_line_center = preview_image_width / 2;
     let vertical_line_extent = (preview_image_width / 1000).max(1);
@@ -301,7 +312,8 @@ pub async fn run(
                 .new_attachment(left_image_create_attachment.description(left_label.clone()))
                 .new_attachment(right_image_create_attachment.description(right_label.clone())),
         )
-        .await?;
+        .await
+        .map_err(|_| "Failed to upload images to Discord. Perhaps they are too large?")?;
 
     /* Encode Data */
 
@@ -340,7 +352,8 @@ pub async fn run(
                     .label("Open"),
             ])]),
         )
-        .await?;
+        .await
+        .map_err(|_| "Failed to add button containing the juxtapose URL.")?;
 
     let mut redis_connection_manager = ctx
         .data
@@ -363,48 +376,4 @@ pub async fn run(
         .unwrap();
 
     Ok(())
-}
-
-pub fn register() -> CreateCommand {
-    CreateCommand::new("juxtapose")
-        .description("Create a juxtapose by uploading two images.")
-        .add_option(
-            CreateCommandOption::new(
-                CommandOptionType::Attachment,
-                "left_image",
-                "The image on the left side (or top).",
-            )
-            .required(true),
-        )
-        .add_option(
-            CreateCommandOption::new(
-                CommandOptionType::Attachment,
-                "right_image",
-                "The image on the right side (or bottom).",
-            )
-            .required(true),
-        )
-        .add_option(
-            CreateCommandOption::new(
-                CommandOptionType::String,
-                "left_label",
-                "The label on the left side (or top).",
-            )
-            .required(false),
-        )
-        .add_option(
-            CreateCommandOption::new(
-                CommandOptionType::String,
-                "right_label",
-                "The label on the right side (or bottom).",
-            )
-            .required(false),
-        )        .add_option(
-            CreateCommandOption::new(
-                CommandOptionType::Boolean,
-                "vertical",
-                "Whether or not the juxtapose should be vertical instead of horizontal. Defaults to false.",
-            )
-            .required(false),
-        )
 }

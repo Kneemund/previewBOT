@@ -2,13 +2,16 @@ use serenity::all::Command;
 use serenity::all::ComponentInteractionDataKind;
 use serenity::all::Interaction;
 use serenity::async_trait;
+use serenity::builder::CreateEmbed;
+use serenity::builder::EditInteractionResponse;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
+use serenity::model::Colour;
 use serenity::prelude::*;
 
 pub struct Handler;
 
-use super::commands;
+use super::commands::*;
 use super::file_preview::check_file_preview;
 use super::file_preview::handle_delete_file_preview_button;
 
@@ -52,9 +55,19 @@ impl EventHandler for Handler {
             Interaction::Command(command_interaction) => {
                 match command_interaction.data.name.as_str() {
                     "juxtapose" => {
-                        commands::juxtapose::run(&ctx, &command_interaction)
-                            .await
-                            .unwrap();
+                        if let Err(error) = juxtapose::run(&ctx, &command_interaction).await {
+                            let _ = command_interaction
+                                .edit_response(
+                                    &ctx,
+                                    EditInteractionResponse::new().add_embed(
+                                        CreateEmbed::new()
+                                            .title("Error")
+                                            .colour(Colour::DARK_RED)
+                                            .description(error),
+                                    ),
+                                )
+                                .await;
+                        }
                     }
                     _ => {}
                 }
@@ -66,7 +79,7 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        Command::set_global_commands(ctx, vec![commands::juxtapose::register()])
+        Command::set_global_commands(ctx, vec![juxtapose::register()])
             .await
             .expect("Failed to register global commands.");
     }
