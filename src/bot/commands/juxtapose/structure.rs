@@ -28,6 +28,7 @@ pub(crate) fn register() -> CreateCommand {
                 "left_label",
                 "The label on the left side (or top).",
             )
+            .max_length(100)
             .required(false),
         )
         .add_option(
@@ -36,8 +37,10 @@ pub(crate) fn register() -> CreateCommand {
                 "right_label",
                 "The label on the right side (or bottom).",
             )
+            .max_length(100)
             .required(false),
-        )        .add_option(
+        )
+        .add_option(
             CreateCommandOption::new(
                 CommandOptionType::Boolean,
                 "vertical",
