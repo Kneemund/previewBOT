@@ -1202,6 +1202,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
+name = "preview_bot"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64",
+ "blake3",
+ "constant_time_eq",
+ "dotenv",
+ "httpdate",
+ "image",
+ "imageproc",
+ "once_cell",
+ "redis",
+ "regex",
+ "reqwest",
+ "rusttype",
+ "serde",
+ "serde_json",
+ "serenity",
+ "tokio",
+ "tower-http",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2094,30 +2118,6 @@ name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
-
-[[package]]
-name = "util_bot"
-version = "0.1.0"
-dependencies = [
- "axum",
- "base64",
- "blake3",
- "constant_time_eq",
- "dotenv",
- "httpdate",
- "image",
- "imageproc",
- "once_cell",
- "redis",
- "regex",
- "reqwest",
- "rusttype",
- "serde",
- "serde_json",
- "serenity",
- "tokio",
- "tower-http",
-]
 
 [[package]]
 name = "version_check"

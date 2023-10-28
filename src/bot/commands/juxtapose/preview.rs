@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use rusttype::{Font, Scale};
 
 static LABEL_FONT: Lazy<Font> = Lazy::new(|| {
-    let font_data = include_bytes!("../../../../assets/font/RobotoCondensed-Regular.ttf");
+    let font_data = include_bytes!("../../../../assets/font/RobotoSlab-Regular.ttf");
     Font::try_from_bytes(font_data as &[u8]).unwrap()
 });
 
