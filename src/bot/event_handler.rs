@@ -1,3 +1,5 @@
+use std::env;
+
 use serenity::all::Command;
 use serenity::all::ComponentInteractionDataKind;
 use serenity::all::Interaction;
@@ -77,8 +79,14 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        Command::set_global_commands(ctx, vec![juxtapose::register()])
-            .await
-            .expect("Failed to register global commands.");
+        let reload_commands = env::args().any(|argument| argument == "--reload-commands");
+
+        if reload_commands {
+            println!("Reloading commands...");
+
+            Command::set_global_commands(ctx, vec![juxtapose::register()])
+                .await
+                .expect("Failed to register global commands.");
+        }
     }
 }
