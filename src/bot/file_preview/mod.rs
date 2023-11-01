@@ -7,7 +7,7 @@ use reqwest::Url;
 use serenity::all::{ButtonStyle, ComponentInteraction};
 use serenity::builder::{
     CreateActionRow, CreateAllowedMentions, CreateAttachment, CreateButton, CreateMessage,
-    EditMessage,
+    EditAttachments, EditMessage,
 };
 use serenity::futures::future::join_all;
 use serenity::model::channel::Message;
@@ -201,9 +201,9 @@ async fn send_file_preview(
             reply
                 .edit(
                     &ctx,
-                    EditMessage::new().remove_all_attachments().attachment(
+                    EditMessage::new().attachments(EditAttachments::new().add(
                         CreateAttachment::bytes(file_content.as_bytes(), "preview.txt"),
-                    ),
+                    )),
                 )
                 .await?;
         }

@@ -27,7 +27,7 @@ reqwest = { version = "0.11.22", default-features = false, features = [
 rusttype = "0.9.3"
 serde = "1.0.188"
 serde_json = "1.0.107"
-serenity = { git = "https://github.com/Kneemund/serenity", branch = "next", default-features = false, features = [
+serenity = { git = "https://github.com/serenity-rs/serenity", branch = "next", default-features = false, features = [
     "builder",
     "cache",
     "client",

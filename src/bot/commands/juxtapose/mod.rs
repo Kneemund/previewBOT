@@ -10,7 +10,9 @@ use imageproc::drawing::Blend;
 use once_cell::sync::Lazy;
 use rusttype::Scale;
 use serenity::all::{Attachment, CommandInteraction};
-use serenity::builder::{CreateActionRow, CreateAttachment, CreateButton, EditInteractionResponse};
+use serenity::builder::{
+    CreateActionRow, CreateAttachment, CreateButton, EditAttachments, EditInteractionResponse,
+};
 use serenity::model::application::{ResolvedOption, ResolvedValue};
 use serenity::prelude::Context;
 use tokio::try_join;
@@ -191,8 +193,8 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     /* Download and Process Images */
 
     let (
-        (mut left_image, left_image_create_attachment),
-        (mut right_image, right_image_create_attachment),
+        (mut left_image, mut left_image_create_attachment),
+        (mut right_image, mut right_image_create_attachment),
     ) = try_join!(
         get_image_from_attachment(
             left_image_attachment,
@@ -216,6 +218,8 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     let label_margin = (preview_image_min_dimension as i32) / 64;
 
     if let Some(ref left_label) = left_label {
+        left_image_create_attachment = left_image_create_attachment.description(left_label);
+
         draw_label(
             &mut left_image,
             if is_vertical {
@@ -230,6 +234,8 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     }
 
     if let Some(ref right_label) = right_label {
+        right_image_create_attachment = right_image_create_attachment.description(right_label);
+
         draw_label(
             &mut right_image,
             if is_vertical {
@@ -292,10 +298,12 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     let reply = interaction
         .edit_response(
             ctx,
-            EditInteractionResponse::new()
-                .new_attachment(CreateAttachment::bytes(final_image_encoded, "preview.png"))
-                .new_attachment(left_image_create_attachment.description(left_label.clone()))
-                .new_attachment(right_image_create_attachment.description(right_label.clone())),
+            EditInteractionResponse::new().attachments(
+                EditAttachments::new()
+                    .add(CreateAttachment::bytes(final_image_encoded, "preview.png"))
+                    .add(left_image_create_attachment)
+                    .add(right_image_create_attachment),
+            ),
         )
         .await
         .map_err(|_| "Failed to upload images to Discord. Perhaps they are too large?")?;
