@@ -39,6 +39,21 @@ trait FilePreview: Sync + Send {
     fn get_raw_content(&self) -> &str;
 }
 
+impl dyn FilePreview {
+    fn get_file_extension_with_alias(&self) -> Option<&str> {
+        self.get_file_extension().map(|extension| match extension {
+            "vsh" => "glsl",
+            "fsh" => "glsl",
+            "gsh" => "glsl",
+            "csh" => "glsl",
+            "vert" => "glsl",
+            "frag" => "glsl",
+            "inc" => "glsl",
+            _ => extension,
+        })
+    }
+}
+
 #[derive(Debug)]
 enum PreviewUrlType {
     GitHubRepositoryFile,
@@ -179,7 +194,9 @@ async fn send_file_preview(
                         file_content.as_bytes(),
                         format!(
                             "preview.{}",
-                            file_preview.get_file_extension().unwrap_or("txt")
+                            file_preview
+                                .get_file_extension_with_alias()
+                                .unwrap_or("txt")
                         )
                         .as_str(),
                     ))
@@ -215,7 +232,10 @@ async fn send_file_preview(
                     .content(
                         MessageBuilder::new()
                             .push(file_preview.get_metadata_content())
-                            .push_codeblock_safe(file_content, file_preview.get_file_extension())
+                            .push_codeblock_safe(
+                                file_content,
+                                file_preview.get_file_extension_with_alias(),
+                            )
                             .build(),
                     )
                     .reference_message(MessageReference::from(msg))

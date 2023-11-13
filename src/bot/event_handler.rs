@@ -31,7 +31,9 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         match interaction {
-            Interaction::Component(component_interaction) => {
+            Interaction::Component(component_interaction) =>
+            {
+                #[allow(clippy::single_match)]
                 match component_interaction.data.kind {
                     ComponentInteractionDataKind::Button => {
                         if component_interaction
@@ -53,6 +55,7 @@ impl EventHandler for Handler {
                 }
             }
             Interaction::Command(command_interaction) => {
+                #[allow(clippy::single_match)]
                 match command_interaction.data.name.as_str() {
                     "juxtapose" => {
                         if let Err(error) = juxtapose::run(&ctx, &command_interaction).await {
