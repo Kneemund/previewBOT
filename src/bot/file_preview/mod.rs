@@ -24,7 +24,7 @@ mod gist;
 mod github_repositoriy_file;
 
 static GITHUB_REPOSITORY_FILE_URL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"https://github\.com(?:/[^/\s]+){2}/blob(?:/[^/\s]+)+#[^/\s]+").unwrap()
+    Regex::new(r"https://github\.com(?:/[^/\s]+){2}/(?:blob|blame)(?:/[^/\s]+)+#[^/\s]+").unwrap()
 });
 
 static GIST_URL_REGEX: Lazy<Regex> =
