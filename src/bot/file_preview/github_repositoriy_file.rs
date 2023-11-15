@@ -18,7 +18,7 @@ impl GitHubRepositoryFilePreview {
         let path_segments: Vec<&str> = message_url.path_segments().unwrap().collect();
 
         let (author, repository, branch, path) = match path_segments.as_slice() {
-            [author, repository, "blob", branch, path @ ..] => {
+            [author, repository, "blob" | "blame", branch, path @ ..] => {
                 (author, repository, branch, path.join("/"))
             }
             _ => return Err("Malformed GitHub repository URL.".into()),
