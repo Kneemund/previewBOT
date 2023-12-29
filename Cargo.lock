@@ -1220,6 +1220,7 @@ dependencies = [
  "rusttype",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "serenity",
  "tokio",
  "tower-http",

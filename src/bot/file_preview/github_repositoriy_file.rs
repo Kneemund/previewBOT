@@ -17,12 +17,15 @@ impl GitHubRepositoryFilePreview {
     pub async fn new(message_url: Url) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path_segments: Vec<&str> = message_url.path_segments().unwrap().collect();
 
-        let (author, repository, branch, path) = match path_segments.as_slice() {
-            [author, repository, "blob" | "blame", branch, path @ ..] => {
-                (author, repository, branch, path.join("/"))
+        let (author, repository, branch, urlencoded_path) = match path_segments.as_slice() {
+            [author, repository, "blob" | "blame", branch, urlencoded_path @ ..] => {
+                (author, repository, branch, urlencoded_path.join("/"))
             }
             _ => return Err("Malformed GitHub repository URL.".into()),
         };
+
+        let path: String = serde_urlencoded::from_str(urlencoded_path.as_str())
+            .map_err(|_| "Failed to decode GitHub URL file path.")?;
 
         let metadata_content = MessageBuilder::new()
             .push_bold_safe(author.to_owned())
