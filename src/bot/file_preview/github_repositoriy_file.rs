@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 
+use percent_encoding::percent_decode_str;
 use reqwest::Url;
 use serenity::utils::MessageBuilder;
 
@@ -24,7 +25,8 @@ impl GitHubRepositoryFilePreview {
             _ => return Err("Malformed GitHub repository URL.".into()),
         };
 
-        let path: String = serde_urlencoded::from_str(urlencoded_path.as_str())
+        let path = percent_decode_str(urlencoded_path.as_str())
+            .decode_utf8()
             .map_err(|_| "Failed to decode GitHub URL file path.")?;
 
         let metadata_content = MessageBuilder::new()
@@ -34,14 +36,14 @@ impl GitHubRepositoryFilePreview {
             .push(" (on ")
             .push_safe(branch.to_owned())
             .push_line(")")
-            .push_line_safe(path.as_str())
+            .push_line_safe(path.as_ref())
             .build();
 
         let mut raw_url = Url::parse("https://raw.githubusercontent.com/").unwrap();
         raw_url
             .path_segments_mut()
             .unwrap()
-            .extend(&[author, repository, branch, path.as_str()]);
+            .extend(&[author, repository, branch, path.as_ref()]);
 
         let file_name = message_url
             .path_segments()
