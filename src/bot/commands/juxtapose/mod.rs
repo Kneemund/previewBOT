@@ -1,3 +1,4 @@
+use std::env;
 use std::io::Cursor;
 use std::ops::Deref;
 
@@ -33,6 +34,15 @@ static IMAGE_LIMITS: Lazy<Limits> = Lazy::new(|| {
     image_limits.max_alloc = Some(32 * 1024 * 1024);
 
     image_limits
+});
+
+static JUXTAPOSE_BASE_URL: Lazy<reqwest::Url> = Lazy::new(|| {
+    reqwest::Url::parse(
+        env::var("JUXTAPOSE_BASE_URL")
+            .as_deref()
+            .unwrap_or("http://localhost"),
+    )
+    .expect("Failed to parse JUXTAPOSE_BASE_URL.")
 });
 
 async fn get_image_from_attachment(
@@ -325,15 +335,12 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     let juxtapose_url_data = general_purpose::URL_SAFE_NO_PAD.encode(data.as_slice());
     let juxtapose_url_mac = general_purpose::URL_SAFE_NO_PAD.encode(mac.as_slice());
 
-    let juxtapose_url = reqwest::Url::parse_with_params(
-        "https://juxtapose.kneemund.de/",
-        &[
-            ("d", juxtapose_url_data.as_str()),
-            ("m", juxtapose_url_mac.as_str()),
-            ("o", if is_vertical { "v" } else { "h" }),
-        ],
-    )
-    .map_err(|_| "Failed to parse juxtapose URL.")?;
+    let mut juxtapose_url = JUXTAPOSE_BASE_URL.clone();
+    juxtapose_url.query_pairs_mut().extend_pairs(&[
+        ("d", juxtapose_url_data.as_str()),
+        ("m", juxtapose_url_mac.as_str()),
+        ("o", if is_vertical { "v" } else { "h" }),
+    ]);
 
     interaction
         .edit_response(

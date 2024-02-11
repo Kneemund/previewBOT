@@ -47,7 +47,13 @@ async fn main() {
 
     /* Redis */
 
-    let redis_client = redis::Client::open("redis://127.0.0.1/").unwrap();
+    let redis_client = redis::Client::open(
+        env::var("REDIS_URL")
+            .as_deref()
+            .unwrap_or("redis://127.0.0.1/"),
+    )
+    .unwrap();
+
     let redis_connection_manager = redis::aio::ConnectionManager::new(redis_client)
         .await
         .expect("Failed to connect to Redis.");
@@ -65,13 +71,14 @@ async fn main() {
         .await
         .expect("Error while creating the client.");
 
-    /* REST API */
+    /* HTTP API */
 
     let cors = CorsLayer::new()
         .allow_methods([axum::http::Method::GET])
         .allow_origin(
             env::var("CORS_ORIGIN")
-                .expect("CORS_ORIGIN is missing.")
+                .as_deref()
+                .unwrap_or("*")
                 .parse::<HeaderValue>()
                 .unwrap(),
         );
@@ -87,7 +94,7 @@ async fn main() {
             .layer(cors),
     );
 
-    /* Start REST API */
+    /* Start HTTP API */
 
     tokio::spawn(async move {
         let port: u16 = env::var("PORT")
