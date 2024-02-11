@@ -1,14 +1,10 @@
 use std::env;
 
-use serenity::all::Command;
-use serenity::all::ComponentInteractionDataKind;
-use serenity::all::Interaction;
+use serenity::all::{
+    Colour, Command, ComponentInteractionDataKind, CreateEmbed, EditInteractionResponse,
+    Interaction, Message, Ready,
+};
 use serenity::async_trait;
-use serenity::builder::CreateEmbed;
-use serenity::builder::EditInteractionResponse;
-use serenity::model::channel::Message;
-use serenity::model::gateway::Ready;
-use serenity::model::Colour;
 use serenity::prelude::*;
 
 pub struct Handler;
@@ -19,17 +15,17 @@ use super::file_preview::handle_delete_file_preview_button;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn message(&self, ctx: Context, mut msg: Message) {
-        if msg.author.bot {
+    async fn message(&self, ctx: &Context, msg: &Message) {
+        if msg.author.bot() {
             return;
         }
 
-        if let Err(error) = check_file_preview(&ctx, &mut msg).await {
+        if let Err(error) = check_file_preview(ctx, msg).await {
             println!("Error while checking file preview: {:?}", error);
         }
     }
 
-    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+    async fn interaction_create(&self, ctx: &Context, interaction: &Interaction) {
         match interaction {
             Interaction::Component(component_interaction) =>
             {
@@ -42,7 +38,7 @@ impl EventHandler for Handler {
                             .starts_with("deleteFilePreview")
                         {
                             if let Err(error) =
-                                handle_delete_file_preview_button(&ctx, component_interaction).await
+                                handle_delete_file_preview_button(ctx, component_interaction).await
                             {
                                 println!(
                                     "Error while handling delete file preview button: {:?}",
@@ -58,10 +54,10 @@ impl EventHandler for Handler {
                 #[allow(clippy::single_match)]
                 match command_interaction.data.name.as_str() {
                     "juxtapose" => {
-                        if let Err(error) = juxtapose::run(&ctx, &command_interaction).await {
+                        if let Err(error) = juxtapose::run(ctx, command_interaction).await {
                             let _ = command_interaction
                                 .edit_response(
-                                    &ctx,
+                                    &ctx.http,
                                     EditInteractionResponse::new().add_embed(
                                         CreateEmbed::new()
                                             .title("Error")
@@ -79,7 +75,7 @@ impl EventHandler for Handler {
         }
     }
 
-    async fn ready(&self, ctx: Context, ready: Ready) {
+    async fn ready(&self, ctx: &Context, ready: &Ready) {
         println!("{} is connected!", ready.user.name);
 
         let reload_commands = env::args().any(|argument| argument == "--reload-commands");
@@ -87,7 +83,7 @@ impl EventHandler for Handler {
         if reload_commands {
             println!("Reloading commands...");
 
-            Command::set_global_commands(ctx, vec![juxtapose::register()])
+            Command::set_global_commands(&ctx.http, &[juxtapose::register()])
                 .await
                 .expect("Failed to register global commands.");
         }

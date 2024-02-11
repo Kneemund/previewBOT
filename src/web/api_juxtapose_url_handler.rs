@@ -64,7 +64,7 @@ pub(crate) async fn handler(
             .await
             .map_err(|_| StatusCode::NOT_FOUND)?;
 
-        if !juxtapose_message.is_own(serenity_cache) {
+        if !juxtapose_message.is_own(&serenity_cache) {
             return Err(StatusCode::BAD_REQUEST);
         }
 
@@ -79,10 +79,16 @@ pub(crate) async fn handler(
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
         let response_data = APIJuxtaposeResponse {
-            left_image_url: left_attachment.url.to_owned(),
-            right_image_url: right_attachment.url.to_owned(),
-            left_image_label: left_attachment.description.to_owned(),
-            right_image_label: right_attachment.description.to_owned(),
+            left_image_url: left_attachment.url.to_string(),
+            right_image_url: right_attachment.url.to_string(),
+            left_image_label: left_attachment
+                .description
+                .as_ref()
+                .map(ToString::to_string),
+            right_image_label: right_attachment
+                .description
+                .as_ref()
+                .map(ToString::to_string),
         };
 
         let expire_unix_ts = response_data

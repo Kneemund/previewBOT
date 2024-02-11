@@ -1,9 +1,6 @@
-use serenity::{
-    all::CommandOptionType,
-    builder::{CreateCommand, CreateCommandOption},
-};
+use serenity::all::{CommandOptionType, CreateCommand, CreateCommandOption};
 
-pub(crate) fn register() -> CreateCommand {
+pub(crate) fn register() -> CreateCommand<'static> {
     CreateCommand::new("juxtapose")
         .description("Create a juxtapose by uploading two images.")
         .add_option(

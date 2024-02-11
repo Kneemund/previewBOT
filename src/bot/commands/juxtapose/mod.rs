@@ -9,19 +9,18 @@ use imageproc::definitions::HasWhite;
 use imageproc::drawing::Blend;
 use once_cell::sync::Lazy;
 use rusttype::Scale;
-use serenity::all::{Attachment, CommandInteraction};
-use serenity::builder::{
-    CreateActionRow, CreateAttachment, CreateButton, EditAttachments, EditInteractionResponse,
+use serenity::all::{
+    Attachment, CommandInteraction, CreateActionRow, CreateAttachment, CreateButton,
+    EditAttachments, EditInteractionResponse, ResolvedOption, ResolvedValue,
 };
-use serenity::model::application::{ResolvedOption, ResolvedValue};
-use serenity::prelude::Context;
+use serenity::prelude::*;
 use tokio::try_join;
 
 use crate::bot::commands::juxtapose::preview::{
     draw_horizontal_line_mut, draw_label, draw_vertical_line_mut, LabelPosition,
 };
 use crate::web::api_juxtapose_response::APIJuxtaposeResponse;
-use crate::{SerenityRedisConnection, BLAKE3_JUXTAPOSE_KEY, HTTP_CLIENT};
+use crate::{SerenityGlobalData, BLAKE3_JUXTAPOSE_KEY, HTTP_CLIENT};
 
 mod preview;
 mod structure;
@@ -81,7 +80,7 @@ async fn get_image_from_attachment(
 
     Ok((
         Blend(image),
-        CreateAttachment::bytes(image_bytes, attachment.filename.as_str()),
+        CreateAttachment::bytes(image_bytes.to_vec(), attachment.filename.to_owned()),
     ))
 }
 
@@ -89,7 +88,7 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     let left_image_attachment = interaction
         .data
         .options()
-        .get(0)
+        .first()
         .and_then(|option| match option {
             ResolvedOption {
                 value: ResolvedValue::Attachment(attachment),
@@ -151,7 +150,7 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
 
     /* Defer Interaction */
 
-    if let Err(error) = interaction.defer(ctx).await {
+    if let Err(error) = interaction.defer(&ctx.http).await {
         println!("Failed to defer juxtapose interaction: {:?}", error);
         return Ok(());
     }
@@ -177,8 +176,8 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
         .height
         .ok_or("The right (bottom) attachment is not a supported image.")?;
 
-    let mut preview_image_width = left_image_width.min(right_image_width);
-    let mut preview_image_height = left_image_height.min(right_image_height);
+    let mut preview_image_width = left_image_width.min(right_image_width).get();
+    let mut preview_image_height = left_image_height.min(right_image_height).get();
 
     const PREVIEW_IMAGE_MAX_SIZE: u32 = 4096;
     let preview_image_max_dimension = preview_image_width.max(preview_image_height);
@@ -297,7 +296,7 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
 
     let reply = interaction
         .edit_response(
-            ctx,
+            &ctx.http,
             EditInteractionResponse::new().attachments(
                 EditAttachments::new()
                     .add(CreateAttachment::bytes(final_image_encoded, "preview.png"))
@@ -338,9 +337,9 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
 
     interaction
         .edit_response(
-            ctx,
+            &ctx.http,
             EditInteractionResponse::new().components(vec![CreateActionRow::Buttons(vec![
-                CreateButton::new_link(juxtapose_url)
+                CreateButton::new_link(juxtapose_url.as_str())
                     .emoji('🔗')
                     .label("Open"),
             ])]),
@@ -349,16 +348,13 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
         .map_err(|_| "Failed to add button containing the juxtapose URL.")?;
 
     let mut redis_connection_manager = ctx
-        .data
-        .read()
-        .await
-        .get::<SerenityRedisConnection>()
-        .unwrap()
-        .to_owned();
+        .data::<SerenityGlobalData>()
+        .redis_connection_manager
+        .clone();
 
     let juxtapose_cache_data = APIJuxtaposeResponse {
-        left_image_url: left_image_attachment.url.to_owned(),
-        right_image_url: right_image_attachment.url.to_owned(),
+        left_image_url: left_image_attachment.url.to_string(),
+        right_image_url: right_image_attachment.url.to_string(),
         left_image_label: left_label,
         right_image_label: right_label,
     };

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use percent_encoding::percent_decode_str;
 use reqwest::Url;
-use serenity::utils::MessageBuilder;
+use serenity::all::MessageBuilder;
 
 use super::{fetch_raw_content, FilePreview};
 

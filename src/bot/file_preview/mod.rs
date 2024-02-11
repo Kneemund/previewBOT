@@ -4,16 +4,13 @@ use std::fmt::Write;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Url;
-use serenity::all::{ButtonStyle, ComponentInteraction};
-use serenity::builder::{
-    CreateActionRow, CreateAllowedMentions, CreateAttachment, CreateButton, CreateMessage,
-    EditAttachments, EditMessage,
+use serenity::all::{
+    ButtonStyle, ComponentInteraction, CreateActionRow, CreateAllowedMentions, CreateAttachment,
+    CreateButton, CreateMessage, EditAttachments, EditMessage, Message, MessageBuilder,
+    MessageReference,
 };
 use serenity::futures::future::join_all;
-use serenity::model::channel::Message;
-use serenity::model::prelude::MessageReference;
 use serenity::prelude::*;
-use serenity::utils::MessageBuilder;
 
 use crate::HTTP_CLIENT;
 
@@ -191,14 +188,13 @@ async fn send_file_preview(
                 CreateMessage::new()
                     .content(file_preview.get_metadata_content())
                     .add_file(CreateAttachment::bytes(
-                        file_content.as_bytes(),
+                        file_content.clone().into_bytes(),
                         format!(
                             "preview.{}",
                             file_preview
                                 .get_file_extension_with_alias()
                                 .unwrap_or("txt")
-                        )
-                        .as_str(),
+                        ),
                     ))
                     .reference_message(msg)
                     .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
@@ -219,7 +215,7 @@ async fn send_file_preview(
                 .edit(
                     &ctx,
                     EditMessage::new().attachments(EditAttachments::new().add(
-                        CreateAttachment::bytes(file_content.as_bytes(), "preview.txt"),
+                        CreateAttachment::bytes(file_content.into_bytes(), "preview.txt"),
                     )),
                 )
                 .await?;
@@ -253,7 +249,7 @@ async fn send_file_preview(
 
 pub async fn check_file_preview(
     ctx: &Context,
-    msg: &mut Message,
+    msg: &Message,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut url_matches: Vec<PreviewUrlMatch> = GITHUB_REPOSITORY_FILE_URL_REGEX
         .find_iter(&msg.content)
@@ -297,7 +293,7 @@ pub async fn check_file_preview(
 
 pub async fn handle_delete_file_preview_button(
     ctx: &Context,
-    interaction: ComponentInteraction,
+    interaction: &ComponentInteraction,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let author_id = interaction
         .data
@@ -306,12 +302,12 @@ pub async fn handle_delete_file_preview_button(
         .ok_or("Failed to retrieve author ID from custom ID.")?
         .1;
 
-    interaction.defer(ctx).await?;
+    interaction.defer(&ctx.http).await?;
 
     if author_id != interaction.user.id.to_string() {
         return Ok(());
     }
 
-    interaction.delete_response(ctx).await?;
+    interaction.delete_response(&ctx.http).await?;
     Ok(())
 }

@@ -5,10 +5,9 @@ use std::sync::Arc;
 use axum::http::HeaderValue;
 use bot::event_handler::Handler;
 use once_cell::sync::Lazy;
-use serenity::client::Cache;
-use serenity::http::Http;
-use serenity::prelude::TypeMapKey;
-use serenity::{prelude::GatewayIntents, Client};
+use serenity::all::{Cache, Http};
+use serenity::prelude::*;
+use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use web::api_juxtapose_url_handler;
 
@@ -31,10 +30,8 @@ pub(crate) static BLAKE3_JUXTAPOSE_KEY: Lazy<[u8; 32]> = Lazy::new(|| {
     )
 });
 
-struct SerenityRedisConnection;
-
-impl TypeMapKey for SerenityRedisConnection {
-    type Value = redis::aio::ConnectionManager;
+struct SerenityGlobalData {
+    redis_connection_manager: redis::aio::ConnectionManager,
 }
 
 #[derive(Clone)]
@@ -62,13 +59,11 @@ async fn main() {
 
     let mut serenity_client = Client::builder(&token, intents)
         .event_handler(Handler)
+        .data(Arc::new(SerenityGlobalData {
+            redis_connection_manager: redis_connection_manager.clone(),
+        }) as _)
         .await
         .expect("Error while creating the client.");
-
-    {
-        let mut data = serenity_client.data.write().await;
-        data.insert::<SerenityRedisConnection>(redis_connection_manager.clone());
-    }
 
     /* REST API */
 
@@ -103,9 +98,9 @@ async fn main() {
         println!("Running server on port {port}...");
 
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
+        let listener = TcpListener::bind(&addr).await.unwrap();
 
-        axum::Server::bind(&addr)
-            .serve(app.into_make_service())
+        axum::serve(listener, app.into_make_service())
             .await
             .unwrap();
     });

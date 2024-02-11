@@ -19,8 +19,8 @@ pub(crate) struct APIJuxtaposeResponse {
 }
 
 impl APIJuxtaposeResponse {
-    fn get_expire_unix_ts(&self) -> Result<usize, Box<dyn Error + Send + Sync>> {
-        let left_ts = usize::from_str_radix(
+    fn get_expire_unix_ts(&self) -> Result<i64, Box<dyn Error + Send + Sync>> {
+        let left_ts = i64::from_str_radix(
             &Url::parse(self.left_image_url.as_str())?
                 .query_pairs()
                 .find(|(key, _)| key == "ex")
@@ -29,7 +29,7 @@ impl APIJuxtaposeResponse {
             16,
         )?;
 
-        let right_ts = usize::from_str_radix(
+        let right_ts = i64::from_str_radix(
             &Url::parse(self.left_image_url.as_str())?
                 .query_pairs()
                 .find(|(key, _)| key == "ex")
@@ -62,7 +62,7 @@ impl APIJuxtaposeResponse {
         &self,
         connection: &mut redis::aio::ConnectionManager,
         key: &str,
-    ) -> Result<usize, StatusCode> {
+    ) -> Result<i64, StatusCode> {
         let mut data = vec![
             ("left_image", self.left_image_url.as_str()),
             ("right_image", self.right_image_url.as_str()),
