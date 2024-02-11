@@ -11,7 +11,6 @@ axum = "0.7.4"
 base64 = "0.21.7"
 blake3 = "1.5.0"
 constant_time_eq = "0.3.0"
-dotenv = "0.15.0"
 httpdate = "1.0.3"
 image = "0.24.8"
 imageproc = "0.23.0"
@@ -41,6 +40,7 @@ serenity = { git = "https://github.com/serenity-rs/serenity", rev="62196ea6c2e6d
 ] }
 tokio = { version = "1.36.0", features = ["full"] }
 tower-http = { version = "0.5.1", features = ["cors"] }
+dotenvy = "0.15.7"
 
 [profile.release]
 opt-level = 3

@@ -43,7 +43,9 @@ pub struct APIJuxtaposeUrlHandlerState {
 
 #[tokio::main]
 async fn main() {
-    dotenv::dotenv().expect("Failed to load .env file.");
+    dotenvy::dotenv()
+        .inspect(|path| println!("Loaded environment variables from {}.", path.display()))
+        .ok();
 
     /* Redis */
 
