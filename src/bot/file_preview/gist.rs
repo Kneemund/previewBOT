@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use serenity::utils::MessageBuilder;
+use serenity::all::MessageBuilder;
 
 use crate::HTTP_CLIENT;
 
@@ -90,7 +90,9 @@ impl GistFilePreview {
             .push(selected_file_name);
 
         let mut metadata_content_builder = MessageBuilder::new();
-        metadata_content_builder.push_bold_line_safe(metadata.owner);
+        metadata_content_builder
+            .push_bold_line_safe(metadata.owner)
+            .push_line_safe(selected_file_name);
 
         if !metadata.description.is_empty() {
             metadata_content_builder
