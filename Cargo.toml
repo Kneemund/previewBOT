@@ -1,6 +1,7 @@
 [package]
 name = "preview_bot"
 version = "0.1.0"
+license = "MPL-2.0"
 edition = "2021"
 
 # runs on aarch64-unknown-linux-gnu
@@ -28,7 +29,8 @@ rusttype = "0.9.3"
 serde = "1.0.196"
 serde_json = "1.0.113"
 percent-encoding = "2.3.1"
-serenity = { git = "https://github.com/serenity-rs/serenity", branch = "next", default-features = false, features = [
+# Specific commit in "next" branch to avoid breaking changes.
+serenity = { git = "https://github.com/serenity-rs/serenity", rev="62196ea6c2e6ddc05da737e60b95d61d589700b4", default-features = false, features = [
     "builder",
     "cache",
     "client",
