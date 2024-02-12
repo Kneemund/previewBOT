@@ -19,22 +19,22 @@ COPY . .
 
 ARG TARGETPLATFORM
 RUN <<EOF
-    if   [ $TARGETPLATFORM = "linux/amd64"  ]; then 
+    if   [ $TARGETPLATFORM = "linux/amd64"  ]; then
         dpkg --add-architecture amd64
         apt-get update
         apt-get install -y clang mold musl-dev musl-tools musl-dev:amd64
         echo "x86_64-unknown-linux-musl" > /opt/.cargo-target
-    elif [ $TARGETPLATFORM = "linux/arm64"  ]; then 
+    elif [ $TARGETPLATFORM = "linux/arm64"  ]; then
         dpkg --add-architecture arm64
         apt-get update
         apt-get install -y clang mold musl-dev musl-tools musl-dev:arm64
         echo "aarch64-unknown-linux-musl" > /opt/.cargo-target
-    elif [ $TARGETPLATFORM = "linux/arm/v7" ]; then 
+    elif [ $TARGETPLATFORM = "linux/arm/v7" ]; then
         dpkg --add-architecture armhf
         apt-get update
         apt-get install -y clang mold musl-dev musl-tools musl-dev:armhf
         echo "armv7-unknown-linux-musleabihf" > /opt/.cargo-target
-    else 
+    else
         echo "ERROR: Unsupported target platform."
         exit 1
     fi
