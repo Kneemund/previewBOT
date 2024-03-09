@@ -1,5 +1,4 @@
 use std::env;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use axum::http::HeaderValue;
@@ -7,7 +6,6 @@ use bot::event_handler::Handler;
 use once_cell::sync::Lazy;
 use serenity::all::{Cache, Http};
 use serenity::prelude::*;
-use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use web::api_juxtapose_url_handler;
 
@@ -99,19 +97,22 @@ async fn main() {
     /* Start HTTP API */
 
     tokio::spawn(async move {
-        let port: u16 = env::var("PORT")
-            .expect("PORT is missing.")
-            .parse()
-            .expect("PORT is not a valid number.");
+        #[cfg(unix)]
+        if let Ok(socket_path_string) = env::var("SOCKET_PATH") {
+            web::serve::serve_unix_listener(app, socket_path_string.as_str()).await;
+            return;
+        }
 
-        println!("Running server on port {port}...");
+        if let Ok(port_string) = env::var("PORT") {
+            web::serve::serve_tcp_listener(app, port_string.as_str()).await;
+            return;
+        }
 
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
-        let listener = TcpListener::bind(&addr).await.unwrap();
+        #[cfg(unix)]
+        panic!("SOCKET_PATH or PORT must be set.");
 
-        axum::serve(listener, app.into_make_service())
-            .await
-            .unwrap();
+        #[cfg(not(unix))]
+        panic!("PORT must be set.");
     });
 
     /* Start Serenity */

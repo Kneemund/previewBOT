@@ -89,14 +89,13 @@ impl GistFilePreview {
             .push("raw")
             .push(selected_file_name);
 
-        let mut metadata_content_builder = MessageBuilder::new();
-        metadata_content_builder
-            .push_bold_line_safe(metadata.owner)
-            .push_line_safe(selected_file_name);
+        let mut metadata_content_builder = MessageBuilder::new()
+            .push_bold_line_safe(metadata.owner.as_str())
+            .push_line_safe(selected_file_name.as_str());
 
         if !metadata.description.is_empty() {
-            metadata_content_builder
-                .push_quote_line_safe(truncate_string(metadata.description.as_str(), 128));
+            metadata_content_builder = metadata_content_builder
+                .push_quote_line_safe(truncate_string(metadata.description, 128).as_str());
         }
 
         let raw_content = fetch_raw_content(raw_url).await?;

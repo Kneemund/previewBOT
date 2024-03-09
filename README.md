@@ -27,6 +27,7 @@ All environment variables without a default value must be specified, otherwise t
 | JUXTAPOSE_BASE_URL  | `http://localhost`   | Base URL used for viewing juxtaposed images, used for generating URLs for the "Open" button.                                                                           |
 | REDIS_URL           | `redis://127.0.0.1/` | URL used for connecting to Redis. Can be either a TCP connection (`redis://` or `rediss://`), or an IPC/UNIX connection (`redis+unix://`).                             |
 | PORT                | NONE                 | Port number that the HTTP API runs on.                                                                                                                                 |
+| SOCKET_PATH         | NONE                 | UNIX Domain Socket path that the HTTP API runs on. Only supported on UNIX systems, takes precendence over PORT.                                                        |
 | CORS_ORIGIN         | `*`                  | Allowed origin domains for CORS. Allows all domains by default, but is highly recommended to be set to a specific domain in production (typically JUXTAPOSE_BASE_URL). |
 
 ## Running Binaries using Podman & Quadlets
@@ -35,10 +36,11 @@ You can run the provided [image](https://github.com/Kneemund/previewBOT/pkgs/con
 
 After creating the `.container` files at the bottom of this section, run `systemctl --user daemon-reload` to generate the systemd service files. The configuration makes a few assumptions about the user's home directory.
 
-- All of the folders and files mentioned below are owned and writable by the current user.
-- `~/production/previewbot/previewbot.env` is an existing file that contains the environment variables described in the section above. Among other things, it must contain `REDIS_URL=redis+unix:///run/redis/redis.sock`.
-- `~/production/redis/data` is an existing folder used to store RDB dumps for persistent storage. 
-- `~/production/redis/conf/redis.conf` is an existing file with the following content for configuring the Unix Domain Socket.
+-   All of the folders and files mentioned below are owned and writable by the current user.
+-   `~/production/previewbot/previewbot.env` is an existing file that contains the environment variables described in the section above. Among other things, it must contain `REDIS_URL=redis+unix:///run/redis/redis.sock`.
+-   `~/production/redis/data` is an existing folder used to store RDB dumps for persistent storage.
+-   `~/production/redis/conf/redis.conf` is an existing file with the following content for configuring the Unix Domain Socket.
+
 ```
 unixsocket /run/redis/redis.sock
 unixsocketperm 777
@@ -50,6 +52,7 @@ Then, run previewBOT using `systemctl --user start previewbot.service`. previewB
 ---
 
 `~/.config/containers/systemd/previewbot.container`
+
 ```service
 [Unit]
 Description=previewBOT container
@@ -69,6 +72,7 @@ WantedBy=default.target
 ---
 
 `~/.config/containers/systemd/redis.container`
+
 ```service
 [Unit]
 Description=Redis container

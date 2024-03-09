@@ -96,12 +96,12 @@ async fn fetch_raw_content(url: Url) -> Result<String, Box<dyn Error + Send + Sy
     Ok(response.text().await?)
 }
 
-fn truncate_string(string: &str, max_length: usize) -> String {
+fn truncate_string(string: String, max_length: usize) -> String {
     if string.len() > max_length {
         let (truncated_string, _) = string.split_at(max_length - 3);
         format!("{}...", truncated_string)
     } else {
-        string.to_owned()
+        string
     }
 }
 
@@ -229,7 +229,7 @@ async fn send_file_preview(
                         MessageBuilder::new()
                             .push(file_preview.get_metadata_content())
                             .push_codeblock_safe(
-                                file_content,
+                                file_content.as_str(),
                                 file_preview.get_file_extension_with_alias(),
                             )
                             .build(),
