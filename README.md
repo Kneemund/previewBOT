@@ -43,7 +43,7 @@ After creating the `.container` files at the bottom of this section, run `system
 
 ```
 unixsocket /run/redis/redis.sock
-unixsocketperm 777
+unixsocketperm 666
 port 0
 ```
 

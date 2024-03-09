@@ -6,10 +6,10 @@ use std::{
 use tokio::net::TcpListener;
 
 #[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
-
-#[cfg(unix)]
 pub(crate) async fn serve_unix_listener(app: Router, socket_path_string: &str) {
+    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::fs::PermissionsExt;
+
     let socket_path = Path::new(socket_path_string);
     let socket_directory_path = socket_path.parent().unwrap();
 
@@ -27,6 +27,8 @@ pub(crate) async fn serve_unix_listener(app: Router, socket_path_string: &str) {
 
     let listener = tokio::net::UnixListener::bind(socket_path).unwrap();
     println!("Running server on UNIX socket {socket_path_string}...");
+
+    std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o666)).unwrap();
 
     axum::serve(listener, app.into_make_service())
         .await
