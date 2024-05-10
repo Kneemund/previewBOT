@@ -5,11 +5,10 @@ use std::ops::Deref;
 use base64::engine::general_purpose;
 use base64::Engine;
 use image::io::Limits;
-use image::{DynamicImage, GenericImage, GenericImageView, ImageFormat, ImageOutputFormat, Rgba};
+use image::{DynamicImage, GenericImage, GenericImageView, ImageFormat, Rgba};
 use imageproc::definitions::HasWhite;
 use imageproc::drawing::Blend;
 use once_cell::sync::Lazy;
-use rusttype::Scale;
 use serenity::all::{
     Attachment, CommandInteraction, CreateActionRow, CreateAttachment, CreateButton,
     EditAttachments, EditInteractionResponse, ResolvedOption, ResolvedValue,
@@ -219,11 +218,7 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
 
     let preview_image_min_dimension = preview_image_width.min(preview_image_height);
 
-    let label_scale = Scale {
-        x: (preview_image_min_dimension as f32) / 24.0,
-        y: (preview_image_min_dimension as f32) / 24.0,
-    };
-
+    let label_scale = (preview_image_min_dimension as f32) / 24.0;
     let label_margin = (preview_image_min_dimension as i32) / 64;
 
     if let Some(ref left_label) = left_label {
@@ -296,10 +291,7 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     let mut final_image_encoded = Vec::new();
     right_image
         .0
-        .write_to(
-            &mut Cursor::new(&mut final_image_encoded),
-            ImageOutputFormat::Png,
-        )
+        .write_to(&mut Cursor::new(&mut final_image_encoded), ImageFormat::Png)
         .map_err(|error| format!("Failed to encode image: {}", error))?;
 
     /* Reply */
