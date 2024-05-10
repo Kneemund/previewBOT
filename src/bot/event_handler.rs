@@ -15,17 +15,17 @@ use super::file_preview::handle_delete_file_preview_button;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn message(&self, ctx: &Context, msg: &Message) {
+    async fn message(&self, ctx: Context, msg: Message) {
         if msg.author.bot() {
             return;
         }
 
-        if let Err(error) = check_file_preview(ctx, msg).await {
+        if let Err(error) = check_file_preview(&ctx, &msg).await {
             println!("Error while checking file preview: {:?}", error);
         }
     }
 
-    async fn interaction_create(&self, ctx: &Context, interaction: &Interaction) {
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         match interaction {
             Interaction::Component(component_interaction) =>
             {
@@ -38,7 +38,8 @@ impl EventHandler for Handler {
                             .starts_with("deleteFilePreview")
                         {
                             if let Err(error) =
-                                handle_delete_file_preview_button(ctx, component_interaction).await
+                                handle_delete_file_preview_button(&ctx, &component_interaction)
+                                    .await
                             {
                                 println!(
                                     "Error while handling delete file preview button: {:?}",
@@ -54,7 +55,7 @@ impl EventHandler for Handler {
                 #[allow(clippy::single_match)]
                 match command_interaction.data.name.as_str() {
                     "juxtapose" => {
-                        if let Err(error) = juxtapose::run(ctx, command_interaction).await {
+                        if let Err(error) = juxtapose::run(&ctx, &command_interaction).await {
                             let _ = command_interaction
                                 .edit_response(
                                     &ctx.http,
@@ -75,7 +76,7 @@ impl EventHandler for Handler {
         }
     }
 
-    async fn ready(&self, ctx: &Context, ready: &Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
         let reload_commands = env::args().any(|argument| argument == "--reload-commands");

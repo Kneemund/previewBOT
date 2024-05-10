@@ -64,7 +64,7 @@ pub(crate) async fn handler(
             .await
             .map_err(|_| StatusCode::NOT_FOUND)?;
 
-        if !juxtapose_message.is_own(&serenity_cache) {
+        if juxtapose_message.author.id != serenity_cache.current_user().id {
             return Err(StatusCode::BAD_REQUEST);
         }
 
