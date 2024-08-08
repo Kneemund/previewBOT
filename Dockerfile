@@ -47,5 +47,4 @@ RUN cp target/$(cat /opt/.cargo-target)/release/preview_bot .
 # == Bundle Stage ==
 FROM scratch
 COPY --from=builder /opt/previewbot/preview_bot /
-CMD [ "./preview_bot" ]
-
+ENTRYPOINT [ "./preview_bot" ]
