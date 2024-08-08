@@ -37,7 +37,7 @@ pub(crate) async fn serve_unix_listener(app: Router, socket_path_string: &str) {
 
 pub(crate) async fn serve_tcp_listener(app: Router, port_string: &str) {
     let port: u16 = port_string.parse().expect("PORT is not a valid number.");
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+    let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), port);
     let listener = TcpListener::bind(&addr).await.unwrap();
 
     println!("Running server on TCP port {port}...");
