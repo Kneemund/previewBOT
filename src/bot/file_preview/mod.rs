@@ -105,6 +105,24 @@ fn truncate_string(string: String, max_length: usize) -> String {
     }
 }
 
+fn expand_tabs(input: &str, tab_size: usize) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut current_position = 0;
+
+    for c in input.chars() {
+        if c == '\t' {
+            let spaces_to_add = tab_size - (current_position % tab_size);
+            result.push_str(&" ".repeat(spaces_to_add));
+            current_position += spaces_to_add;
+        } else {
+            result.push(c);
+            current_position += 1;
+        }
+    }
+
+    result
+}
+
 async fn send_file_preview(
     ctx: &Context,
     msg: &Message,
@@ -135,7 +153,7 @@ async fn send_file_preview(
         .lines()
         .skip(top_line_number as usize - 1)
         .take((bottom_line_number - top_line_number + 1) as usize)
-        .map(|line| line.to_owned())
+        .map(|line| expand_tabs(line, 4))
         .collect();
 
     if selected_content_lines.is_empty() {
