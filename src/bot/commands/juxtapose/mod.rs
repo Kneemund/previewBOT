@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use base64::engine::general_purpose;
 use base64::Engine;
-use image::io::Limits;
+use image::Limits;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageFormat, Rgba};
 use imageproc::definitions::HasWhite;
 use imageproc::drawing::Blend;
@@ -79,7 +79,7 @@ async fn get_image_from_attachment(
         .await
         .map_err(|_| "Failed to receive image data from CDN.")?;
 
-    let mut image_reader = image::io::Reader::new(Cursor::new(&image_bytes));
+    let mut image_reader = image::ImageReader::new(Cursor::new(&image_bytes));
     image_reader.set_format(image_format);
     image_reader.limits(IMAGE_LIMITS.to_owned());
 
