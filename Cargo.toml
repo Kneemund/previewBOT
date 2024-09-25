@@ -16,7 +16,7 @@ image = "0.25.1"
 imageproc = "0.25.0"
 once_cell = "1.19.0"
 percent-encoding = "2.3.1"
-redis = { version = "0.26.1", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "0.27.2", features = ["tokio-comp", "connection-manager"] }
 regex = "1.10.4"
 reqwest = { version = "0.12.4", default-features = false, features = [
     "json",
@@ -36,7 +36,7 @@ serenity = { git = "https://github.com/serenity-rs/serenity", branch = "next", d
     "rustls_backend",
 ] }
 tokio = { version = "1.37.0", features = ["full"] }
-tower-http = { version = "0.5.2", features = ["cors"] }
+tower-http = { version = "0.6.1", features = ["cors"] }
 
 # support for generic listeners, including unix domain sockets
 [patch.crates-io]
