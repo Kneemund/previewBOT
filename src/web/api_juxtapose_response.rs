@@ -76,7 +76,7 @@ impl APIJuxtaposeResponse {
             data.push(("right_label", right_image_label.as_str()));
         }
 
-        connection
+        let _: () = connection
             .hset_multiple(key, &data)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -86,7 +86,7 @@ impl APIJuxtaposeResponse {
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-        connection.expire_at(key, unix_ts).await.map_err(|err| {
+        let _: () = connection.expire_at(key, unix_ts).await.map_err(|err| {
             println!("Error while setting expire timestamp: {:?}", err);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
