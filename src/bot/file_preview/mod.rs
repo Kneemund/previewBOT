@@ -15,10 +15,10 @@ use serenity::prelude::*;
 use crate::HTTP_CLIENT;
 
 use self::gist::GistFilePreview;
-use self::github_repositoriy_file::GitHubRepositoryFilePreview;
+use self::github_repository_file::GitHubRepositoryFilePreview;
 
 mod gist;
-mod github_repositoriy_file;
+mod github_repository_file;
 
 static GITHUB_REPOSITORY_FILE_URL_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"https://github\.com(?:/[^/\s]+){2}/(?:blob|blame)(?:/[^/\s]+)+#(?:[^/\s]*L[^/\s]*)+").unwrap()

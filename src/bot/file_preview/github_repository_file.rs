@@ -14,13 +14,21 @@ pub struct GitHubRepositoryFilePreview {
     raw_content: String,
 }
 
+fn get_short_reference(reference: &str) -> &str {
+    if reference.len() == 40 && reference.chars().all(|c| c.is_ascii_hexdigit()) {
+        &reference[..7]
+    } else {
+        reference
+    }
+}
+
 impl GitHubRepositoryFilePreview {
     pub async fn new(message_url: Url) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path_segments: Vec<&str> = message_url.path_segments().unwrap().collect();
 
-        let (author, repository, branch, urlencoded_path) = match path_segments.as_slice() {
-            [author, repository, "blob" | "blame", branch, urlencoded_path @ ..] => {
-                (author, repository, branch, urlencoded_path.join("/"))
+        let (author, repository, reference, urlencoded_path) = match path_segments.as_slice() {
+            [author, repository, "blob" | "blame", reference, urlencoded_path @ ..] => {
+                (author, repository, reference, urlencoded_path.join("/"))
             }
             _ => return Err("Malformed GitHub repository URL.".into()),
         };
@@ -34,16 +42,18 @@ impl GitHubRepositoryFilePreview {
             .push("/")
             .push_bold_safe(repository.to_owned())
             .push(" (on ")
-            .push_safe(branch.to_owned())
+            .push_safe(get_short_reference(reference))
             .push_line(")")
             .push_line_safe(path.as_ref())
             .build();
 
         let mut raw_url = Url::parse("https://raw.githubusercontent.com/").unwrap();
-        raw_url
-            .path_segments_mut()
-            .unwrap()
-            .extend(&[author, repository, branch, path.as_ref()]);
+        raw_url.path_segments_mut().unwrap().extend(&[
+            author,
+            repository,
+            reference,
+            path.as_ref(),
+        ]);
 
         let file_name = message_url
             .path_segments()
