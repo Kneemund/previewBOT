@@ -337,7 +337,7 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
     interaction
         .edit_response(
             &ctx.http,
-            EditInteractionResponse::new().components(vec![CreateActionRow::Buttons(vec![
+            EditInteractionResponse::new().components(&[CreateActionRow::buttons(&[
                 CreateButton::new_link(juxtapose_url.as_str())
                     .emoji('🔗')
                     .label("Open"),

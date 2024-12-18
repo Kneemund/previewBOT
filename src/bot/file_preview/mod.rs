@@ -21,7 +21,10 @@ mod gist;
 mod github_repository_file;
 
 static GITHUB_REPOSITORY_FILE_URL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"https://github\.com(?:/[^/\s]+){2}/(?:blob|blame)(?:/[^/\s]+)+#(?:[^/\s]*L[^/\s]*)+").unwrap()
+    Regex::new(
+        r"https://github\.com(?:/[^/\s]+){2}/(?:blob|blame)(?:/[^/\s]+)+#(?:[^/\s]*L[^/\s]*)+",
+    )
+    .unwrap()
 });
 
 static GIST_URL_REGEX: Lazy<Regex> =
@@ -216,10 +219,7 @@ async fn send_file_preview(
                     ))
                     .reference_message(msg)
                     .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
-                    .components(vec![CreateActionRow::Buttons(vec![
-                        open_button,
-                        delete_button,
-                    ])]),
+                    .components(&[CreateActionRow::buttons(&[open_button, delete_button])]),
             )
             .await?;
 
@@ -254,10 +254,7 @@ async fn send_file_preview(
                     )
                     .reference_message(MessageReference::from(msg))
                     .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
-                    .components(vec![CreateActionRow::Buttons(vec![
-                        open_button,
-                        delete_button,
-                    ])]),
+                    .components(&[CreateActionRow::buttons(&[open_button, delete_button])]),
             )
             .await?;
     }

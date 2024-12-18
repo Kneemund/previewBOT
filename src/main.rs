@@ -60,10 +60,10 @@ async fn main() {
 
     /* Serenity */
 
-    let token = env::var("BOT_TOKEN").expect("BOT_TOKEN is missing.");
+    let token = Token::from_env("BOT_TOKEN").expect("BOT_TOKEN is missing.");
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
-    let mut serenity_client = Client::builder(&token, intents)
+    let mut serenity_client = Client::builder(token, intents)
         .event_handler(Handler)
         .data(Arc::new(SerenityGlobalData {
             redis_connection_manager: redis_connection_manager.clone(),
