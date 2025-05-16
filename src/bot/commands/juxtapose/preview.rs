@@ -4,7 +4,7 @@ use ab_glyph::{Font, FontRef, ScaleFont};
 use image::{DynamicImage, GenericImage, Rgba};
 use imageproc::{
     definitions::HasWhite,
-    drawing::{draw_filled_rect_mut, draw_text_mut, text_size, Blend},
+    drawing::{Blend, draw_filled_rect_mut, draw_text_mut, text_size},
     rect::Rect,
 };
 use once_cell::sync::Lazy;

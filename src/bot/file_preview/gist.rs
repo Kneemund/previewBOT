@@ -9,7 +9,7 @@ use serenity::all::MessageBuilder;
 
 use crate::HTTP_CLIENT;
 
-use super::{fetch_raw_content, truncate_string, FilePreview};
+use super::{FilePreview, fetch_raw_content, truncate_string};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct APIGistMetadata {

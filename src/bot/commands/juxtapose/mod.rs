@@ -2,8 +2,8 @@ use std::env;
 use std::io::Cursor;
 use std::ops::Deref;
 
-use base64::engine::general_purpose;
 use base64::Engine;
+use base64::engine::general_purpose;
 use image::Limits;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageFormat, Rgba};
 use imageproc::definitions::HasWhite;
@@ -17,10 +17,10 @@ use serenity::prelude::*;
 use tokio::try_join;
 
 use crate::bot::commands::juxtapose::preview::{
-    draw_horizontal_line_mut, draw_label, draw_vertical_line_mut, LabelPosition,
+    LabelPosition, draw_horizontal_line_mut, draw_label, draw_vertical_line_mut,
 };
 use crate::web::api_juxtapose_response::APIJuxtaposeResponse;
-use crate::{SerenityGlobalData, BLAKE3_JUXTAPOSE_KEY, HTTP_CLIENT};
+use crate::{BLAKE3_JUXTAPOSE_KEY, HTTP_CLIENT, SerenityGlobalData};
 
 mod preview;
 mod structure;

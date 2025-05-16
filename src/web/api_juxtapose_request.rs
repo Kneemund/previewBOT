@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use base64::{engine::general_purpose, Engine};
+use base64::{Engine, engine::general_purpose};
 use serde::Deserialize;
 
 use crate::BLAKE3_JUXTAPOSE_KEY;

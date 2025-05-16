@@ -67,7 +67,7 @@ async fn main() {
         .event_handler(Handler)
         .data(Arc::new(SerenityGlobalData {
             redis_connection_manager: redis_connection_manager.clone(),
-        }) as _)
+        }))
         .await
         .expect("Error while creating the client.");
 

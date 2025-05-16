@@ -1,11 +1,11 @@
 use axum::{
+    Json,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
 };
-use base64::{engine::general_purpose, Engine};
-use serenity::all::{ChannelId, MessageId};
+use base64::{Engine, engine::general_purpose};
+use serenity::all::{GenericChannelId, MessageId};
 use std::mem::size_of;
 
 use crate::APIJuxtaposeUrlHandlerState;
@@ -57,7 +57,7 @@ pub(crate) async fn handler(
             MessageId::from(data_ids.next().ok_or(StatusCode::INTERNAL_SERVER_ERROR)??);
 
         let channel_id =
-            ChannelId::from(data_ids.next().ok_or(StatusCode::INTERNAL_SERVER_ERROR)??);
+            GenericChannelId::from(data_ids.next().ok_or(StatusCode::INTERNAL_SERVER_ERROR)??);
 
         let juxtapose_message = serenity_http
             .get_message(channel_id, message_id)

@@ -5,7 +5,7 @@ use percent_encoding::percent_decode_str;
 use reqwest::Url;
 use serenity::all::MessageBuilder;
 
-use super::{fetch_raw_content, FilePreview};
+use super::{FilePreview, fetch_raw_content};
 
 pub struct GitHubRepositoryFilePreview {
     message_url: Url,
@@ -27,9 +27,13 @@ impl GitHubRepositoryFilePreview {
         let path_segments: Vec<&str> = message_url.path_segments().unwrap().collect();
 
         let (author, repository, reference, urlencoded_path) = match path_segments.as_slice() {
-            [author, repository, "blob" | "blame", reference, urlencoded_path @ ..] => {
-                (author, repository, reference, urlencoded_path.join("/"))
-            }
+            [
+                author,
+                repository,
+                "blob" | "blame",
+                reference,
+                urlencoded_path @ ..,
+            ] => (author, repository, reference, urlencoded_path.join("/")),
             _ => return Err("Malformed GitHub repository URL.".into()),
         };
 
@@ -57,7 +61,7 @@ impl GitHubRepositoryFilePreview {
 
         let file_name = message_url
             .path_segments()
-            .and_then(|segments| segments.last())
+            .and_then(|mut segments| segments.next_back())
             .ok_or("File name not found.")?;
 
         let file_extension = PathBuf::from(file_name)
