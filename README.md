@@ -12,7 +12,7 @@ You can invite the official instance of this bot to your server.
 
 Provides an HTTP API for detailed views of juxtaposed images on the web. The source code of the website used for the official instance of this bot is available [here](https://github.com/Kneemund/juxtapose).
 
-A container image can be built by using the provided `Dockerfile`. It supports fast multi-architecture builds for amd64, aarch64 and arm/v7 using cross compilation instead of emulation. The produced binaries are fully statically-linked using `musl` and `mold`. As such, the image is derived from the empty `scratch` base image and only contains the binary.
+A container image can be built by using the provided `Containerfile`. It supports fast multi-architecture builds for amd64, aarch64 and arm/v7 using cross compilation instead of emulation. The produced binaries are fully statically-linked using `musl` and `mold`. As such, the image is derived from the empty `scratch` base image and only contains the binary.
 
 Running the bot with the `--reload-commands` argument will register all slash commands after connecting to the Discord API. This is only necessary on new accounts or after changes to the structure of slash commands.
 
