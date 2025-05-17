@@ -23,12 +23,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Extract Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          flavor: latest=true
       - name: Build
         id: build_image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ${{ env.REGISTRY }}/${{ github.repository }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           containerfiles: ./Containerfile
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@v2

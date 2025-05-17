@@ -6,7 +6,7 @@ edition = "2024"
 
 [dependencies]
 ab_glyph = "0.2.25"
-axum = { git = "https://github.com/tokio-rs/axum", tag = "axum-v0.8.0-rc.1" }
+axum = "0.8.4"
 base64 = "0.22.1"
 blake3 = "1.5.1"
 constant_time_eq = "0.4.2"

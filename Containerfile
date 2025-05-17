@@ -1,15 +1,3 @@
-# # Build Stage
-# FROM messense/rust-musl-cross:aarch64-musl AS builder
-
-# WORKDIR /opt/previewbot/
-# COPY . .
-# RUN cargo build --release --target aarch64-unknown-linux-musl
-
-# # Bundle Stage
-# FROM scratch
-# COPY --from=builder /opt/previewbot/target/aarch64-unknown-linux-musl/release/preview_bot .
-# ENTRYPOINT [ "./preview_bot" ]
-
 # == Build Stage ==
 # Pinned to build platform, uses cross compilation to reach target platform.
 FROM --platform=$BUILDPLATFORM rust AS builder
