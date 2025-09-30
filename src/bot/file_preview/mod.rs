@@ -6,8 +6,8 @@ use regex::Regex;
 use reqwest::Url;
 use serenity::all::{
     ButtonStyle, ComponentInteraction, CreateActionRow, CreateAllowedMentions, CreateAttachment,
-    CreateButton, CreateMessage, EditAttachments, EditMessage, Message, MessageBuilder,
-    MessageReference,
+    CreateButton, CreateComponent, CreateMessage, EditAttachments, EditMessage, Message,
+    MessageBuilder, MessageReference,
 };
 use serenity::futures::future::join_all;
 use serenity::prelude::*;
@@ -219,7 +219,10 @@ async fn send_file_preview(
                     ))
                     .reference_message(msg)
                     .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
-                    .components(&[CreateActionRow::buttons(&[open_button, delete_button])]),
+                    .components(&[CreateComponent::ActionRow(CreateActionRow::buttons(&[
+                        open_button,
+                        delete_button,
+                    ]))]),
             )
             .await?;
 
@@ -254,7 +257,10 @@ async fn send_file_preview(
                     )
                     .reference_message(MessageReference::from(msg))
                     .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
-                    .components(&[CreateActionRow::buttons(&[open_button, delete_button])]),
+                    .components(&[CreateComponent::ActionRow(CreateActionRow::buttons(&[
+                        open_button,
+                        delete_button,
+                    ]))]),
             )
             .await?;
     }

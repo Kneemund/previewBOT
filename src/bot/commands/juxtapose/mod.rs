@@ -11,7 +11,7 @@ use imageproc::drawing::Blend;
 use once_cell::sync::Lazy;
 use serenity::all::{
     Attachment, CommandInteraction, CreateActionRow, CreateAttachment, CreateButton,
-    EditAttachments, EditInteractionResponse, ResolvedOption, ResolvedValue,
+    CreateComponent, EditAttachments, EditInteractionResponse, ResolvedOption, ResolvedValue,
 };
 use serenity::prelude::*;
 use tokio::try_join;
@@ -334,14 +334,16 @@ pub async fn run(ctx: &Context, interaction: &CommandInteraction) -> Result<(), 
         ("o", if is_vertical { "v" } else { "h" }),
     ]);
 
+    let open_button = CreateButton::new_link(juxtapose_url.as_str())
+        .emoji('🔗')
+        .label("Open");
+
     interaction
         .edit_response(
             &ctx.http,
-            EditInteractionResponse::new().components(&[CreateActionRow::buttons(&[
-                CreateButton::new_link(juxtapose_url.as_str())
-                    .emoji('🔗')
-                    .label("Open"),
-            ])]),
+            EditInteractionResponse::new().components(&[CreateComponent::ActionRow(
+                CreateActionRow::buttons(&[open_button]),
+            )]),
         )
         .await
         .map_err(|_| "Failed to add button containing the juxtapose URL.")?;
