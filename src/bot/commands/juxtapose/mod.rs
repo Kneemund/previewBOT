@@ -48,7 +48,7 @@ async fn get_image_from_attachment(
     attachment: &Attachment,
     image_width: u32,
     image_height: u32,
-) -> Result<(Blend<DynamicImage>, CreateAttachment), String> {
+) -> Result<(Blend<DynamicImage>, CreateAttachment<'_>), String> {
     let image_mime = attachment
         .content_type
         .clone()

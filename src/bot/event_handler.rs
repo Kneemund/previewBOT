@@ -36,10 +36,11 @@ impl EventHandler for Handler {
                                 .custom_id
                                 .starts_with("deleteFilePreview")
                             {
-                                if let Err(error) =
+                                let delete_result =
                                     handle_delete_file_preview_button(ctx, component_interaction)
-                                        .await
-                                {
+                                        .await;
+
+                                if let Err(error) = delete_result {
                                     println!(
                                         "Error while handling delete file preview button: {:?}",
                                         error
