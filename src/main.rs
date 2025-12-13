@@ -64,7 +64,7 @@ async fn main() {
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
     let mut serenity_client = Client::builder(token, intents)
-        .event_handler(Handler)
+        .event_handler(Arc::new(Handler))
         .data(Arc::new(SerenityGlobalData {
             redis_connection_manager: redis_connection_manager.clone(),
         }))
