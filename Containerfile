@@ -31,6 +31,6 @@ RUN cargo build --release --target "$(cat /opt/.cargo-target)"
 RUN cp target/$(cat /opt/.cargo-target)/release/preview_bot .
 
 # == Bundle Stage ==
-FROM scratch
+FROM gcr.io/distroless/static
 COPY --from=builder /opt/previewbot/preview_bot /
 ENTRYPOINT [ "./preview_bot" ]
