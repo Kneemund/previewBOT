@@ -30,6 +30,7 @@ pub struct GistFilePreview {
     metadata_content: String,
     file_extension: Option<String>,
     raw_content: String,
+    action_row_buttons: Vec<(char, String, String)>,
 }
 
 impl GistFilePreview {
@@ -100,11 +101,23 @@ impl GistFilePreview {
 
         let raw_content = fetch_raw_content(raw_url).await?;
 
+        let mut author_url = Url::parse("https://gist.github.com/").unwrap();
+        author_url
+            .path_segments_mut()
+            .unwrap()
+            .push(metadata.owner.as_str());
+
+        let action_row_buttons = vec![
+            ('📄', selected_file_name.clone(), message_url.to_string()),
+            ('👥', metadata.owner.clone(), author_url.to_string()),
+        ];
+
         Ok(Self {
             message_url,
             metadata_content: metadata_content_builder.build(),
             file_extension,
             raw_content,
+            action_row_buttons,
         })
     }
 }
@@ -124,5 +137,9 @@ impl FilePreview for GistFilePreview {
 
     fn get_raw_content(&self) -> &str {
         self.raw_content.as_str()
+    }
+
+    fn get_action_row_buttons(&self) -> &Vec<(char, String, String)> {
+        &self.action_row_buttons
     }
 }

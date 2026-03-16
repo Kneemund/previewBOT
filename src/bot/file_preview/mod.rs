@@ -20,6 +20,15 @@ use self::github_repository_file::GitHubRepositoryFilePreview;
 mod gist;
 mod github_repository_file;
 
+const MAX_FILE_PREVIEWS_PER_MESSAGE: usize = 3;
+const MAX_FILE_SIZE: u64 = 4_194_304; // 4 MiB
+const MAX_BUTTON_LABEL_LENGTH: usize = 34;
+
+const MAX_INLINE_CONTENT_LENGTH: usize = 2000 - 100; // 100 characters reserved for formatting
+const MAX_INLINE_SELECTED_LINES: usize = 6;
+
+const CONTENT_TAB_SIZE: usize = 4;
+
 static GITHUB_REPOSITORY_FILE_URL_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"https://github\.com(?:/[^/\s]+){2}/(?:blob|blame)(?:/[^/\s]+)+#(?:[^/\s]*L[^/\s]*)+",
@@ -37,6 +46,7 @@ trait FilePreview: Sync + Send {
     fn get_metadata_content(&self) -> &str;
     fn get_file_extension(&self) -> Option<&str>;
     fn get_raw_content(&self) -> &str;
+    fn get_action_row_buttons(&self) -> &Vec<(char, String, String)>;
 }
 
 impl dyn FilePreview {
@@ -91,7 +101,7 @@ async fn fetch_raw_content(url: Url) -> Result<String, Box<dyn Error + Send + Sy
 
     if response
         .content_length()
-        .is_some_and(|file_size| file_size > 4_194_304)
+        .is_some_and(|file_size| file_size > MAX_FILE_SIZE)
     {
         return Err("File size is too large.".into());
     }
@@ -101,20 +111,20 @@ async fn fetch_raw_content(url: Url) -> Result<String, Box<dyn Error + Send + Sy
 
 fn truncate_string(string: String, max_length: usize) -> String {
     if string.len() > max_length {
-        let (truncated_string, _) = string.split_at(max_length - 3);
-        format!("{}...", truncated_string)
+        let (truncated_string, _) = string.split_at(max_length - 1);
+        format!("{}…", truncated_string)
     } else {
         string
     }
 }
 
-fn expand_tabs(input: &str, tab_size: usize) -> String {
+fn expand_tabs(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut current_position = 0;
 
     for c in input.chars() {
         if c == '\t' {
-            let spaces_to_add = tab_size - (current_position % tab_size);
+            let spaces_to_add = CONTENT_TAB_SIZE - (current_position % CONTENT_TAB_SIZE);
             result.push_str(&" ".repeat(spaces_to_add));
             current_position += spaces_to_add;
         } else {
@@ -156,7 +166,7 @@ async fn send_file_preview(
         .lines()
         .skip(top_line_number as usize - 1)
         .take((bottom_line_number - top_line_number + 1) as usize)
-        .map(|line| expand_tabs(line, 4))
+        .map(|line| expand_tabs(line))
         .collect();
 
     if selected_content_lines.is_empty() {
@@ -189,18 +199,28 @@ async fn send_file_preview(
         },
     );
 
-    let open_button = CreateButton::new_link(file_preview.get_message_url().as_str())
-        .emoji('🔗')
-        .label("Open")
-        .to_owned();
-
     let delete_button = CreateButton::new(format!("deleteFilePreview:{}", msg.author.id))
         .style(ButtonStyle::Secondary)
         .emoji('🗑')
         .to_owned();
 
-    if file_content.len() + file_preview.get_metadata_content().len() > 1900
-        || selected_content_lines.len() > 6
+    let mut action_row_buttons = file_preview
+        .get_action_row_buttons()
+        .iter()
+        .map(|(emoji, label, url)| {
+            CreateButton::new_link(url)
+                .emoji(emoji.clone())
+                .label(truncate_string(label.clone(), MAX_BUTTON_LABEL_LENGTH))
+        })
+        .collect::<Vec<CreateButton>>();
+
+    action_row_buttons.push(delete_button);
+
+    let action_row_component =
+        CreateComponent::ActionRow(CreateActionRow::buttons(&action_row_buttons));
+
+    if file_content.len() + file_preview.get_metadata_content().len() > MAX_INLINE_CONTENT_LENGTH
+        || selected_content_lines.len() > MAX_INLINE_SELECTED_LINES
     {
         let mut reply = msg
             .channel_id
@@ -219,10 +239,7 @@ async fn send_file_preview(
                     ))
                     .reference_message(msg)
                     .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
-                    .components(&[CreateComponent::ActionRow(CreateActionRow::buttons(&[
-                        open_button,
-                        delete_button,
-                    ]))]),
+                    .components(&[action_row_component]),
             )
             .await?;
 
@@ -257,10 +274,7 @@ async fn send_file_preview(
                     )
                     .reference_message(MessageReference::from(msg))
                     .allowed_mentions(CreateAllowedMentions::new().replied_user(false))
-                    .components(&[CreateComponent::ActionRow(CreateActionRow::buttons(&[
-                        open_button,
-                        delete_button,
-                    ]))]),
+                    .components(&[action_row_component]),
             )
             .await?;
     }
@@ -299,7 +313,7 @@ pub async fn check_file_preview(
     let file_previews = join_all(
         url_matches
             .into_iter()
-            .take(3)
+            .take(MAX_FILE_PREVIEWS_PER_MESSAGE)
             .map(|element| element.get_file_preview())
             .collect::<Vec<_>>(),
     )

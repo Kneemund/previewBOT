@@ -12,6 +12,7 @@ pub struct GitHubRepositoryFilePreview {
     metadata_content: String,
     file_extension: Option<String>,
     raw_content: String,
+    action_row_buttons: Vec<(char, String, String)>,
 }
 
 fn get_short_reference(reference: &str) -> &str {
@@ -59,22 +60,34 @@ impl GitHubRepositoryFilePreview {
             path.as_ref(),
         ]);
 
-        let file_name = message_url
-            .path_segments()
-            .and_then(|mut segments| segments.next_back())
-            .ok_or("File name not found.")?;
-
+        let file_name = *path_segments.last().ok_or("File name not found.")?;
         let file_extension = PathBuf::from(file_name)
             .extension()
             .map(|extension| extension.to_string_lossy().into_owned());
 
         let raw_content = fetch_raw_content(raw_url).await?;
 
+        let mut author_url = Url::parse("https://github.com/").unwrap();
+        author_url.path_segments_mut().unwrap().push(author);
+
+        let mut repository_url = author_url.clone();
+        repository_url
+            .path_segments_mut()
+            .unwrap()
+            .extend(&[repository, "tree", reference]);
+
+        let action_row_buttons = vec![
+            ('📄', file_name.to_string(), message_url.to_string()),
+            ('🗃', repository.to_string(), repository_url.to_string()),
+            ('👥', author.to_string(), author_url.to_string()),
+        ];
+
         Ok(Self {
             message_url,
             metadata_content,
             file_extension,
             raw_content,
+            action_row_buttons,
         })
     }
 }
@@ -94,5 +107,9 @@ impl FilePreview for GitHubRepositoryFilePreview {
 
     fn get_raw_content(&self) -> &str {
         self.raw_content.as_str()
+    }
+
+    fn get_action_row_buttons(&self) -> &Vec<(char, String, String)> {
+        &self.action_row_buttons
     }
 }
