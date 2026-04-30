@@ -166,7 +166,7 @@ async fn send_file_preview(
         .lines()
         .skip(top_line_number as usize - 1)
         .take((bottom_line_number - top_line_number + 1) as usize)
-        .map(|line| expand_tabs(line))
+        .map(expand_tabs)
         .collect();
 
     if selected_content_lines.is_empty() {
@@ -209,7 +209,7 @@ async fn send_file_preview(
         .iter()
         .map(|(emoji, label, url)| {
             CreateButton::new_link(url)
-                .emoji(emoji.clone())
+                .emoji(*emoji)
                 .label(truncate_string(label.clone(), MAX_BUTTON_LABEL_LENGTH))
         })
         .collect::<Vec<CreateButton>>();
