@@ -28,7 +28,7 @@ impl EventHandler for Handler {
             }
             FullEvent::InteractionCreate { interaction, .. } => match interaction {
                 Interaction::Component(component_interaction) => {
-                    #[allow(clippy::single_match)]
+                    #[allow(clippy::single_match, clippy::collapsible_match)]
                     match component_interaction.data.kind {
                         ComponentInteractionDataKind::Button => {
                             if component_interaction
