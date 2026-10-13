@@ -6,7 +6,7 @@ A Discord bot written in Rust for sending file previews of GitHub URLs and for j
 
 You can invite the official instance of this bot to your server.
 
-> https://previewbot.kneemund.de/invite
+> https://previewbot.mechelk.eu/invite
 
 ## Details
 
